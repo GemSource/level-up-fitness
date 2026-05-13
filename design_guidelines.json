@@ -1,0 +1,117 @@
+{
+  "project_name": "Hunter Strength System",
+  "theme_and_archetype": {
+    "theme": "Dark",
+    "archetype": "7 (Electric & Neon)",
+    "aesthetic": "Heavy Solo-Leveling RPG, Cyberpunk Fitness, System Window, Glowing Neon on Void Black"
+  },
+  "colors": {
+    "background": {
+      "default": "#000000",
+      "surface": "#050505",
+      "surface_elevated": "#0A0A0A"
+    },
+    "primary": {
+      "base": "#00FFFF",
+      "glow": "rgba(0, 255, 255, 0.5)",
+      "deep": "#0088AA"
+    },
+    "secondary": {
+      "base": "#FF0055",
+      "glow": "rgba(255, 0, 85, 0.5)"
+    },
+    "neutral": {
+      "text_main": "#E0E0E0",
+      "text_muted": "#888888",
+      "border": "#1A1A1A",
+      "border_glow": "rgba(0, 255, 255, 0.2)"
+    },
+    "system_alerts": {
+      "quest_new": "#00FFFF",
+      "quest_complete": "#00FF00",
+      "boss_warning": "#FF0000"
+    }
+  },
+  "typography": {
+    "font_families": {
+      "heading": "'Rajdhani', 'Orbitron', 'Chakra Petch', sans-serif",
+      "body": "'JetBrains Mono', 'Space Mono', monospace",
+      "system_text": "'Share Tech Mono', monospace"
+    },
+    "hierarchy": {
+      "h1": "text-4xl md:text-5xl font-black tracking-tighter uppercase",
+      "h2": "text-2xl md:text-3xl font-bold tracking-tight uppercase",
+      "h3": "text-xl font-bold uppercase",
+      "body": "text-base tracking-wide",
+      "stats": "text-sm text-cyan-400 font-mono tracking-widest",
+      "overline": "text-xs font-bold tracking-[0.2em] uppercase text-cyan-500"
+    }
+  },
+  "layout_and_spacing": {
+    "container": "w-full max-w-md mx-auto min-h-screen relative overflow-hidden bg-black text-gray-100",
+    "padding": "px-4 py-6 md:p-6",
+    "spacing_scale": "Use generous vertical spacing between sections (gap-6, gap-8). Keep stats widgets dense (gap-2, p-3).",
+    "borders": "Corners should be sharp (rounded-none) or subtly angled. Use 1px borders with border-cyan-900/50."
+  },
+  "components": {
+    "cards": {
+      "base_classes": "bg-[#050505] border border-cyan-900/30 p-4 relative overflow-hidden",
+      "glow_effect": "hover:border-cyan-500/50 shadow-[0_0_15px_rgba(0,255,255,0.05)] hover:shadow-[0_0_20px_rgba(0,255,255,0.15)] transition-all duration-300",
+      "corner_accents": "Add tiny absolute positioned divs at corners (w-2 h-2 border-t border-l border-cyan-500 top-0 left-0) for tech look."
+    },
+    "buttons": {
+      "primary": "bg-cyan-950/40 text-cyan-400 border border-cyan-500/50 uppercase font-bold tracking-widest py-3 px-6 hover:bg-cyan-900/60 hover:shadow-[0_0_15px_rgba(0,255,255,0.3)] transition-all",
+      "danger": "bg-red-950/40 text-red-500 border border-red-500/50 uppercase font-bold tracking-widest py-3 px-6 hover:bg-red-900/60 hover:shadow-[0_0_15px_rgba(255,0,0,0.3)] transition-all"
+    },
+    "progress_bars": {
+      "container": "w-full h-2 bg-gray-900 border border-gray-800",
+      "fill_xp": "h-full bg-cyan-500 shadow-[0_0_10px_rgba(0,255,255,0.8)]",
+      "fill_hp": "h-full bg-red-500 shadow-[0_0_10px_rgba(255,0,0,0.8)]"
+    },
+    "typography_badges": {
+      "rank_badge": "inline-block px-3 py-1 font-black text-2xl border border-current shadow-[0_0_10px_currentColor] bg-black"
+    }
+  },
+  "motion": {
+    "system_alert": "Slide up from bottom with typewriter effect for text.",
+    "level_up": "Screen flash (opacity 0 to 1 back to 0), scale up badge with spring physics.",
+    "hover_states": "translate-y-[-2px] with increased glow shadow."
+  },
+  "image_urls": {
+    "system_bg": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/ecc561d3-204e-4100-b92c-797113ab8b8c/images/bdf89721c64d506fe9b7b6a079ecb9c85b5e1080466d89fb9499ca388a73871b.png",
+      "description": "Abstract dark background with glowing cyan grid lines for the app backdrop",
+      "usage": "Use as a fixed background image with opacity-30 or opacity-20 behind the main container to give the 'System Window' vibe."
+    },
+    "rank_badge_s": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/ecc561d3-204e-4100-b92c-797113ab8b8c/images/03ae6f74485835900d63b8a2531d7a7d9ffc2cea7a4eee9aacded25a588d7928.png",
+      "description": "S Rank hunter badge, glowing neon blue hexagonal emblem",
+      "usage": "Use in the Boss Fight test day screen or ultimate achievement screen."
+    },
+    "rank_badge_e": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/ecc561d3-204e-4100-b92c-797113ab8b8c/images/c443c0f989f7906d9207df38cea170f4dbd7b207dc611026a491868e70caa1ec.png",
+      "description": "E Rank hunter badge, rusty iron with faint blue glow",
+      "usage": "Use on the dashboard as the starting rank."
+    },
+    "boss_fight_portal": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/ecc561d3-204e-4100-b92c-797113ab8b8c/images/b89c649631efec751f2ff0416280413b75329def17a975e174cd47c5487427b4.png",
+      "description": "Epic boss fight glowing blue portal",
+      "usage": "Hero image for the 12-week max testing (Boss Fight) screen."
+    },
+    "hologram_ai_coach": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/ecc561d3-204e-4100-b92c-797113ab8b8c/images/5819fa8cec8daede030b48ca54834584a27f058535c178f8c95248b725633490.png",
+      "description": "Futuristic AI coach avatar, glowing blue holographic",
+      "usage": "Avatar image for the AI Coach suggestions modal/screen."
+    }
+  },
+  "instructions_to_main_agent": [
+    "Build the app as a mobile web app interface using a 'max-w-md mx-auto' container to simulate the mobile app feel in a browser environment.",
+    "Ensure all interactive elements have descriptive 'data-testid' attributes in kebab-case based on role.",
+    "Never use generic sans-serif fonts (like Inter or Roboto). Use 'Rajdhani', 'Orbitron', or similar display fonts for headings and 'JetBrains Mono' for body/stats text.",
+    "Implement the 'System' alert popups using customized UI Dialogs/Toasts with sharp borders, glowing box shadows, and deep black backgrounds.",
+    "Do not use Shadcn default roundings. Override all borders to be sharp (rounded-none) and backgrounds to match the void black theme.",
+    "Use framer-motion for level up animations, slide-in system notifications, and subtle floating effects on the rank badges.",
+    "Replace typical solid background overlays with backdrop-blur and 1px borders for a holographic feel.",
+    "For the 'Today's Quest' cards, implement an angled top-left corner effect or glowing cyan border."
+  ]
+}
