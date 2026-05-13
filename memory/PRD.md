@@ -1,56 +1,61 @@
-# Hunter Strength System — PRD v6
+# Hunter Strength System — PRD v7
 
-## v6 Update: Boss Fight Lock System
+## v7 Update: Hunter Shop + Loot Drops + Inventory + Buff Activation
 
-### New Endpoint
-`GET /api/profile/{id}/boss-fight/requirements` — returns gate status for the user's next-rank Boss Fight (14/14 tests PASS).
+### New Currency
+**Hunter Coins** — stored on profile (`coins` field). Awarded for:
+- +20 per workout, +30 if all exercises done, +100 weekly perfect bonus
+- +200 base boss-fight, +400 if rank-up
+- +25 to +200 per achievement unlock (by tier: beginner 25, basic 50, medium 100, major/elite 200)
+- Loot drops occasionally give coin packs (+20 to +110 with streak multiplier)
 
-### Response Schema
-```json
-{
-  "locked": true,
-  "next_rank": "C",
-  "next_threshold_kg": 550,
-  "rank_threshold_kg": 600,
-  "requirements": [
-    {"key":"total","label":"Total","have":580,"need":550,"unit":"kg","met":true},
-    {"key":"squat","label":"Squat","have":140,"need":130,"unit":"kg","met":true},
-    {"key":"bench","label":"Bench","have":80,"need":90,"unit":"kg","met":false},
-    {"key":"deadlift","label":"Deadlift","have":160,"need":150,"unit":"kg","met":true},
-    {"key":"quests","label":"Quests Completed","have":8,"need":12,"unit":"","met":false},
-    {"key":"deloads","label":"Deload Weeks","have":0,"need":1,"unit":"","met":false}
-  ],
-  "missing": ["Bench needs +10kg","Complete 4 more quests completed","Complete 1 more deload weeks"],
-  "max_rank": false
-}
-```
+### Loot Drop System
+After every completed workout: `roll_loot(streak)` returns 1 guaranteed drop + 20-35% bonus chance. Rarity weights:
+- Default: common 60% / rare 30% / epic 9% / legendary 1%
+- Streak ≥3: 45/40/13/2 (slight rare-weight boost)
+- Streak ≥7: 0/60/35/5 (guaranteed ≥ rare)
+- Streak ≥14: 30/40/25/5 (legendary chance 5x)
 
-### Requirement Tiers (per next-rank target)
-| Target | Total | Squat | Bench | Deadlift | Quests | Deloads |
-|--------|-------|-------|-------|----------|--------|---------|
-| D      | 450   | 100   | 60    | 120      | 6      | 0       |
-| C      | 550   | 130   | 90    | 150      | 12     | 1       |
-| B      | 650   | 150   | 110   | 170      | 20     | 1       |
-| A      | 750   | 180   | 130   | 200      | 30     | 2       |
-| S      | 850   | 220   | 150   | 240      | 50     | 2       |
+### Item Catalog (10 items, 4 categories)
+- **Training**: Power Boost (+2.5% XP), Extra Set Token (+25 flat XP)
+- **XP**: +25% XP, 2x XP, XP Surge (7d, +10%)
+- **Recovery**: Fatigue Reset, Joint Recovery Buff
+- **Boss**: Second Attempt Token, Adrenaline Surge (+50% XP), Monarch's Aura (legendary, +100%)
 
-### Enforcement
-`POST /api/profile/{id}/boss-fight` now calls `evaluate_boss_requirements()` first. Returns **403 Forbidden** with structured detail if locked:
-```json
-{"detail": {"error":"boss_fight_locked","message":"Boss Fight Locked","next_rank":"C","missing":[...],"requirements":[...]}}
-```
+Rarities: common (grey #888) / rare (blue #5C9DFF) / epic (purple #C77CFF) / legendary (gold #FFD700)
+
+### New Endpoints (4)
+- `GET /api/shop/catalog` — full catalog
+- `GET /api/profile/{id}/inventory` — coins, items[], active_buffs[]
+- `POST /api/profile/{id}/shop/buy` `{item_key}` — deducts coins, adds to inventory
+- `POST /api/profile/{id}/inventory/activate` `{item_key}` — moves to active_buffs (max 2)
+
+### Buff Activation Flow
+1. User taps "Activate" on item in inventory
+2. Item removed from inventory, added to `active_buffs[]` with scope (workout / boss_fight / duration_7d / workout_or_boss)
+3. Buff consumed automatically when matching session completes
+4. Workout-scoped buff applies `xp_mult` to xp_gained → `buff_xp_extra` returned in workout-log response
+5. Boss-fight scoped buff multiplies `xp_reward` (e.g., Adrenaline 1.5x → 1000 → 1500)
+
+### Balance Rules Enforced
+- Max 2 active buffs at once
+- Buffs cannot fake strength — only XP/coin modifiers, no override of logged weights
+- Buffs require workout_complete=true (partial sessions don't trigger loot or buff consumption)
+- Insufficient coins → 400 with `detail.error="insufficient_coins"`
 
 ### Frontend
-- **`/boss-fight` screen**: when locked, shows red-bordered SystemFrame with:
-  - Lock icon + "BOSS FIGHT LOCKED" header
-  - Per-requirement row (✓ met / ✗ unmet) showing `have / need` values
-  - Red "MISSING" box listing actionable gaps ("Bench needs +10kg", "Complete 4 more quests")
-  - Input fields dimmed (editable=false)
-  - Engage button shows "LOCKED — COMPLETE REQUIREMENTS" with neutral styling
-- Submit handler parses 403 structured response and re-displays missing list as alert
+- **`/shop.tsx`**: Black Market with category filter (ALL/TRAINING/RECOVERY/XP/BOSS), rarity-colored item cards, coin balance pill, buy buttons (greyed if insufficient)
+- **`/inventory.tsx`**: Hunter Cache showing Active Buffs section (max 2) + Item grid with quantity tags, Activate buttons
+- **Dashboard header**: gold coin pill (tappable → shop) + cube icon (tappable → inventory) + planet icon (AI coach)
+- **Workout completion alert**: now shows "🎁 [LOOT ACQUIRED]" section with rarity-tagged items
 
-## Cumulative System (v1-v6)
-- 8+ feature areas: onboarding, auto-block, RPE adaptive load, day-intensity, goal-ratio progression, cardio, AI coach, rank progress, boss-fight gates
-- 116 achievements / 20 categories / 5 tiers
-- 11 backend endpoints; AI via real Claude Sonnet 4.5
-- Backend total tests: v1: 16, v3: 34, v4: 15, v5: 14, v6: 14 — **93/93 PASS**
+### Backend: 27/27 v7 tests PASS (23 v7 + 4 hotfix)
+- Bug fixed: boss-fight `boss_coin`/`boss_applied` NameError on success path resolved
+- All catalog/buy/activate/loot endpoints verified
+- Buff scope isolation tested (workout buff NOT consumed by boss-fight, vice versa)
+
+## Cumulative System (v1→v7)
+- **15 backend endpoints**, all live-tested
+- **116 achievements / 20 categories / 5 tiers**
+- **120/120 cumulative backend tests** across all iterations PASS
+- AI Coach via real Claude Sonnet 4.5 (Emergent LLM key)
