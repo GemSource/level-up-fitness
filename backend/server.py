@@ -79,6 +79,9 @@ class Profile(BaseModel):
     early_sessions: int = 0
     comeback_count: int = 0
     no_days_off_max: int = 0  # consecutive days trained (lift OR cardio)
+    coins: int = 0
+    inventory: Dict[str, int] = {}        # item_key -> quantity
+    active_buffs: List[Dict[str, Any]] = []  # [{item_key, scope, applied_at, expires_at}]
 
 class CardioInput(BaseModel):
     activity: str  # "run" | "bike" | "sprint"
@@ -587,6 +590,15 @@ def check_achievements(profile: dict, completed_workouts: int) -> List[str]:
     if xp_bonus > 0:
         apply_xp(profile, xp_bonus)
     profile["achievement_xp_last"] = xp_bonus
+    # v7: award coins for each new achievement (50-200 per tier)
+    coin_per_tier = {"beginner": 25, "basic": 50, "medium": 100, "major": 200, "elite": 200}
+    coin_bonus = 0
+    for k in new:
+        tier = ACHIEVEMENTS.get(k, {}).get("tier", "basic")
+        coin_bonus += coin_per_tier.get(tier, 50)
+    if coin_bonus > 0:
+        profile["coins"] = profile.get("coins", 0) + coin_bonus
+    profile["achievement_coins_last"] = coin_bonus
     return new
 
 # ---------------- Routes ----------------
@@ -827,6 +839,34 @@ async def log_workout(profile_id: str, data: WorkoutLogInput):
 
     apply_xp(p, xp_gained)
 
+    # ---- v7: Coins, Buff consumption, Loot drop ----
+    coin_gain = 0
+    buff_xp_extra = 0
+    loot_drops: List[Dict[str, Any]] = []
+    if workout_complete:
+        coin_gain += 20  # workout completed
+        if len(done_ex) == total_ex:
+            coin_gain += 30  # full quest
+        if all(w.get("completed") for w in [w for w in workouts if w["week"] == target_w["week"]]):
+            coin_gain += 100  # weekly completion bonus
+        # Consume one workout-scoped buff if any
+        applied = consume_active_buff(p, "workout")
+        if applied:
+            eff = applied.get("effect")
+            val = applied.get("value", 1.0)
+            if eff == "xp_mult":
+                buff_xp_extra = int(xp_gained * (val - 1.0))
+                if buff_xp_extra > 0:
+                    apply_xp(p, buff_xp_extra)
+            elif eff == "flat_xp":
+                buff_xp_extra = int(val)
+                apply_xp(p, buff_xp_extra)
+        # Loot drop (streak-modified rarity)
+        loot_drops = roll_loot(p.get("streak", 0))
+        loot_coin = apply_loot_to_profile(p, loot_drops)
+        coin_gain += loot_coin
+    p["coins"] = p.get("coins", 0) + coin_gain
+
     # ---- RPE-driven progression for the main lift ----
     main_logs = [ex for ex in data.exercises if ex.is_main and ex.done]
     suggestion_text = ""
@@ -896,11 +936,18 @@ async def log_workout(profile_id: str, data: WorkoutLogInput):
             "session_types_completed": p.get("session_types_completed", []),
             "first_week_done": p.get("first_week_done", False),
             "first_deload_done": p.get("first_deload_done", False),
+            "coins": p.get("coins", 0),
+            "inventory": p.get("inventory", {}),
+            "active_buffs": p.get("active_buffs", []),
         }}
     )
 
     return {
-        "xp_gained": xp_gained,
+        "xp_gained": xp_gained + buff_xp_extra,
+        "buff_xp_extra": buff_xp_extra,
+        "coins_gained": coin_gain,
+        "total_coins": p.get("coins", 0),
+        "loot_drops": loot_drops,
         "total_xp": p["xp"],
         "level": p["level"],
         "streak": p["streak"],
@@ -996,6 +1043,8 @@ async def boss_fight(profile_id: str, data: BossFightInput):
             "goal_ratio": p["goal_ratio"],
             "estimated_weeks_to_goal": p["estimated_weeks_to_goal"],
             "pending_adjustments": p["pending_adjustments"],
+            "coins": p.get("coins", 0),
+            "active_buffs": p.get("active_buffs", []),
         }}
     )
     return {
@@ -1005,6 +1054,9 @@ async def boss_fight(profile_id: str, data: BossFightInput):
         "new_total": new_total,
         "rank_up": new_rank != old_rank,
         "xp_reward": xp_reward,
+        "coins_gained": boss_coin,
+        "total_coins": p.get("coins", 0),
+        "buff_used": boss_applied,
         "new_achievements": [{"key": k, **ACHIEVEMENTS[k]} for k in new_ach],
     }
 
@@ -1335,6 +1387,197 @@ async def rank_progress(profile_id: str):
         "message": message,
         "rank_up": rank_up,
     }
+
+
+# ---------------- Shop / Loot System (v7) ----------------
+import random as _random
+
+ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
+    # Training Boosts
+    "power_boost":   {"name": "Power Boost",   "desc": "+2.5% XP gain on next workout",      "category": "training", "rarity": "common",    "price": 80,   "effect": "xp_mult", "value": 1.025, "scope": "workout"},
+    "extra_set":     {"name": "Extra Set Token","desc": "Award bonus +25 XP next workout",   "category": "training", "rarity": "rare",      "price": 150,  "effect": "flat_xp", "value": 25,    "scope": "workout"},
+    # XP Boosts
+    "xp_25":         {"name": "+25% XP",       "desc": "+25% XP on next workout",            "category": "xp",       "rarity": "common",    "price": 100,  "effect": "xp_mult", "value": 1.25,  "scope": "workout"},
+    "xp_2x":         {"name": "2x XP",         "desc": "Double XP on next workout",          "category": "xp",       "rarity": "epic",      "price": 350,  "effect": "xp_mult", "value": 2.0,   "scope": "workout"},
+    "xp_surge":      {"name": "XP Surge (7d)", "desc": "+10% XP for 7 days",                 "category": "xp",       "rarity": "rare",      "price": 250,  "effect": "xp_mult", "value": 1.10,  "scope": "duration_7d"},
+    # Recovery
+    "fatigue_reset": {"name": "Fatigue Reset", "desc": "Skip RPE-based penalty next workout","category": "recovery", "rarity": "rare",      "price": 200,  "effect": "no_penalty","value": 1,    "scope": "workout"},
+    "joint_buff":    {"name": "Joint Recovery","desc": "+10% XP and reset streak grace",     "category": "recovery", "rarity": "common",    "price": 120,  "effect": "xp_mult", "value": 1.10,  "scope": "workout"},
+    # Boss Fight
+    "boss_2nd":      {"name": "Second Attempt","desc": "Retry a failed boss fight",          "category": "boss",     "rarity": "epic",      "price": 500,  "effect": "boss_retry","value": 1,   "scope": "boss_fight"},
+    "adrenaline":    {"name": "Adrenaline Surge","desc": "+50% XP reward on boss fight",     "category": "boss",     "rarity": "rare",      "price": 300,  "effect": "boss_mult","value": 1.5,  "scope": "boss_fight"},
+    "legendary_aura":{"name": "Monarch's Aura","desc": "+100% XP for next workout AND boss",  "category": "boss",     "rarity": "legendary", "price": 1500, "effect": "xp_mult", "value": 2.0,   "scope": "workout_or_boss"},
+}
+
+# Loot drop table per rarity
+LOOT_POOL_BY_RARITY = {
+    "common":    ["power_boost", "xp_25", "joint_buff"],
+    "rare":      ["extra_set", "xp_surge", "fatigue_reset", "adrenaline"],
+    "epic":      ["xp_2x", "boss_2nd"],
+    "legendary": ["legendary_aura"],
+}
+
+RARITY_BASE_RATES = [("common", 0.60), ("rare", 0.30), ("epic", 0.09), ("legendary", 0.01)]
+RARITY_COLOR = {"common": "#888888", "rare": "#5C9DFF", "epic": "#C77CFF", "legendary": "#FFD700"}
+
+
+def roll_loot(streak: int) -> List[Dict[str, Any]]:
+    """Return list of loot items (one guaranteed + possible bonus).
+    Streak applies multipliers: day3+10% coin/XP-style; day7 forces ≥rare; day14 boosts legendary."""
+    # streak multiplier on rarity bias
+    rates = list(RARITY_BASE_RATES)
+    if streak >= 14:
+        rates = [("common", 0.30), ("rare", 0.40), ("epic", 0.25), ("legendary", 0.05)]
+    elif streak >= 7:
+        rates = [("common", 0.0), ("rare", 0.60), ("epic", 0.35), ("legendary", 0.05)]
+    elif streak >= 3:
+        rates = [("common", 0.45), ("rare", 0.40), ("epic", 0.13), ("legendary", 0.02)]
+
+    rarities, weights = zip(*rates)
+
+    def pick_one() -> Dict[str, Any]:
+        rarity = _random.choices(rarities, weights=weights)[0]
+        # Coin-only drops mixed into common pool occasionally
+        if rarity == "common" and _random.random() < 0.4:
+            coin_amt = _random.randint(20, 100)
+            mult = 1.1 if streak >= 3 else 1.0
+            coin_amt = int(coin_amt * mult)
+            return {"type": "coins", "amount": coin_amt, "rarity": "common", "name": f"+{coin_amt} Hunter Coins", "rarity_color": RARITY_COLOR["common"]}
+        key = _random.choice(LOOT_POOL_BY_RARITY[rarity])
+        item = ITEM_CATALOG[key]
+        return {
+            "type": "item",
+            "item_key": key,
+            "name": item["name"],
+            "desc": item["desc"],
+            "rarity": rarity,
+            "rarity_color": RARITY_COLOR[rarity],
+            "category": item["category"],
+        }
+
+    drops = [pick_one()]
+    # Bonus drop chance 20-30% (up to 35% at streak 14)
+    bonus_chance = 0.20 + min(0.15, streak * 0.01)
+    if _random.random() < bonus_chance:
+        drops.append(pick_one())
+    return drops
+
+
+def apply_loot_to_profile(p: dict, drops: List[Dict[str, Any]]) -> int:
+    """Mutates profile inventory/coins. Returns total coins gained from loot."""
+    coin_gain = 0
+    inv = dict(p.get("inventory", {}))
+    for d in drops:
+        if d["type"] == "coins":
+            coin_gain += d["amount"]
+        else:
+            inv[d["item_key"]] = inv.get(d["item_key"], 0) + 1
+    p["inventory"] = inv
+    return coin_gain
+
+
+def consume_active_buff(p: dict, scope: str) -> Optional[Dict[str, Any]]:
+    """Pop the first active buff matching scope. Returns its catalog info or None."""
+    buffs = list(p.get("active_buffs", []))
+    for i, b in enumerate(buffs):
+        s = b.get("scope")
+        if s == scope or s == "workout_or_boss":
+            applied = ITEM_CATALOG.get(b["item_key"])
+            buffs.pop(i)
+            p["active_buffs"] = buffs
+            return applied
+    return None
+
+
+@api_router.get("/shop/catalog")
+async def shop_catalog():
+    return [
+        {"key": k, **v, "rarity_color": RARITY_COLOR.get(v["rarity"], "#888")}
+        for k, v in ITEM_CATALOG.items()
+    ]
+
+
+@api_router.get("/profile/{profile_id}/inventory")
+async def get_inventory(profile_id: str):
+    p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Profile not found")
+    inv = p.get("inventory", {})
+    items = []
+    for k, qty in inv.items():
+        if qty <= 0 or k not in ITEM_CATALOG:
+            continue
+        cat = ITEM_CATALOG[k]
+        items.append({"key": k, "quantity": qty, **cat, "rarity_color": RARITY_COLOR.get(cat["rarity"], "#888")})
+    return {
+        "coins": p.get("coins", 0),
+        "items": items,
+        "active_buffs": p.get("active_buffs", []),
+    }
+
+
+class ShopBuyInput(BaseModel):
+    item_key: str
+
+
+@api_router.post("/profile/{profile_id}/shop/buy")
+async def shop_buy(profile_id: str, data: ShopBuyInput):
+    p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Profile not found")
+    item = ITEM_CATALOG.get(data.item_key)
+    if not item:
+        raise HTTPException(400, "Unknown item")
+    coins = p.get("coins", 0)
+    if coins < item["price"]:
+        raise HTTPException(400, {"error": "insufficient_coins", "have": coins, "need": item["price"]})
+    inv = dict(p.get("inventory", {}))
+    inv[data.item_key] = inv.get(data.item_key, 0) + 1
+    new_coins = coins - item["price"]
+    await db.profiles.update_one(
+        {"id": profile_id},
+        {"$set": {"coins": new_coins, "inventory": inv}}
+    )
+    return {"coins": new_coins, "inventory": inv, "purchased": item}
+
+
+class ActivateInput(BaseModel):
+    item_key: str
+
+
+@api_router.post("/profile/{profile_id}/inventory/activate")
+async def activate_item(profile_id: str, data: ActivateInput):
+    p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Profile not found")
+    item = ITEM_CATALOG.get(data.item_key)
+    if not item:
+        raise HTTPException(400, "Unknown item")
+    inv = dict(p.get("inventory", {}))
+    if inv.get(data.item_key, 0) < 1:
+        raise HTTPException(400, "Item not in inventory")
+    active = list(p.get("active_buffs", []))
+    if len(active) >= 2:
+        raise HTTPException(400, "Max 2 active buffs at a time")
+    # Decrement inventory, add buff
+    inv[data.item_key] -= 1
+    if inv[data.item_key] <= 0:
+        inv.pop(data.item_key, None)
+    now = datetime.now(timezone.utc)
+    expires = None
+    if item["scope"] == "duration_7d":
+        expires = (now + timedelta(days=7)).isoformat()
+    active.append({
+        "item_key": data.item_key,
+        "scope": item["scope"],
+        "applied_at": now.isoformat(),
+        "expires_at": expires,
+    })
+    await db.profiles.update_one(
+        {"id": profile_id},
+        {"$set": {"inventory": inv, "active_buffs": active}}
+    )
+    return {"active_buffs": active, "inventory": inv}
 
 
 @api_router.post("/profile/{profile_id}/ai-coach")

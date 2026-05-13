@@ -19,3 +19,7 @@ export const getProgress = (id: string) => api.get(`/profile/${id}/progress`).th
 export const askCoach = (id: string, question?: string) => api.post(`/profile/${id}/ai-coach`, { question }).then(r => r.data);
 export const getRankProgress = (id: string) => api.get(`/profile/${id}/rank-progress`).then(r => r.data);
 export const getBossRequirements = (id: string) => api.get(`/profile/${id}/boss-fight/requirements`).then(r => r.data);
+export const getShopCatalog = () => api.get('/shop/catalog').then(r => r.data);
+export const getInventory = (id: string) => api.get(`/profile/${id}/inventory`).then(r => r.data);
+export const buyItem = (id: string, item_key: string) => api.post(`/profile/${id}/shop/buy`, { item_key }).then(r => r.data);
+export const activateItem = (id: string, item_key: string) => api.post(`/profile/${id}/inventory/activate`, { item_key }).then(r => r.data);

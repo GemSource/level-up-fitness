@@ -85,7 +85,14 @@ export default function WorkoutLog() {
         })),
       };
       const result = await logWorkout(pid, payload);
-      let msg = `+${result.xp_gained} XP\nLEVEL ${result.level} · ${result.streak} DAY STREAK\n${result.exercises_done}/${result.exercises_total} EXERCISES\n\n${result.suggestion}`;
+      let msg = `+${result.xp_gained} XP`;
+      if (result.coins_gained) msg += `\n+${result.coins_gained} Hunter Coins`;
+      msg += `\nLEVEL ${result.level} · ${result.streak} DAY STREAK\n${result.exercises_done}/${result.exercises_total} EXERCISES\n\n${result.suggestion}`;
+      if (result.loot_drops && result.loot_drops.length > 0) {
+        msg += '\n\n🎁 [LOOT ACQUIRED]\n' + result.loot_drops.map((d: any) =>
+          d.type === 'coins' ? `★ ${d.name}` : `★ ${d.name} (${d.rarity.toUpperCase()})`
+        ).join('\n');
+      }
       if (result.main_lift_adjustment_kg !== 0 && result.main_lift_adjustment_kg != null) {
         const sign = result.main_lift_adjustment_kg > 0 ? '+' : '';
         msg += `\n\n[ADAPTIVE LOAD]\n${sign}${result.main_lift_adjustment_kg}kg applied to upcoming ${result.main_lift_key} sessions`;

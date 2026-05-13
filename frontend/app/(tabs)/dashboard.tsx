@@ -72,9 +72,18 @@ export default function Dashboard() {
             <Text style={styles.system}>[STATUS WINDOW]</Text>
             <Text style={styles.title}>{p.name.toUpperCase()}</Text>
           </View>
-          <TouchableOpacity testID="btn-coach" onPress={() => router.push('/ai-coach')}>
-            <Ionicons name="planet-outline" size={28} color={Colors.primary} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity testID="btn-shop" onPress={() => router.push('/shop')} style={styles.coinBox}>
+              <Ionicons name="diamond" size={14} color="#FFD700" />
+              <Text style={styles.coinTxt}>{p.coins || 0}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity testID="btn-inventory" onPress={() => router.push('/inventory')} style={styles.iconBtn}>
+              <Ionicons name="cube-outline" size={22} color={Colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity testID="btn-coach" onPress={() => router.push('/ai-coach')} style={styles.iconBtn}>
+              <Ionicons name="planet-outline" size={22} color={Colors.primary} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <SystemFrame style={styles.heroFrame} color={rc}>
@@ -199,6 +208,10 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.bg },
   scroll: { padding: 16, paddingBottom: 40 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  coinBox: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: '#FFD700', backgroundColor: 'rgba(255,215,0,0.06)' },
+  coinTxt: { color: '#FFD700', fontFamily: Fonts.monoBold, fontSize: 12 },
+  iconBtn: { padding: 4 },
   system: { color: Colors.primary, fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 3 },
   title: { color: Colors.textMain, fontFamily: Fonts.heading, fontSize: 22, letterSpacing: 1, marginTop: 2 },
   heroFrame: { marginBottom: 16 },

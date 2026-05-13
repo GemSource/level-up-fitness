@@ -1,0 +1,52 @@
+{
+  "summary": "v7 Shop/Loot/Inventory/Buff system: 22/23 pytest cases passed. Catalog (10 items w/ all required fields), profile-create coin awards from auto-unlocked achievements, inventory shape, shop buy (success/insufficient/unknown/404), activate (move-to-buffs, max-2-buffs, not-in-inventory), workout-log full (coins_gained>=20 + loot_drops list w/ rarity/rarity_color), workout-log partial (no coins/loot), xp_mult buff consumed (buff_xp_extra>0 + buff removed from active_buffs), boss-fight lock regression, plus regression on dashboard/rank-progress/achievements/progress/boss-requirements/cardio/ai-coach all 200 OK. ONE CRITICAL BUG: POST /api/profile/{id}/boss-fight crashes with 500 NameError when requirements ARE met — coins_gained/buff_used response builder references undefined `boss_coin` and `boss_applied` variables.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/profile/{id}/boss-fight",
+        "issue": "NameError: name 'boss_coin' is not defined at server.py:1057. The v7 response adds `coins_gained: boss_coin` and `buff_used: boss_applied` (lines 1057, 1059) but neither variable is ever assigned anywhere in the handler. Endpoint returns 500 for every successful boss-fight (when requirements are met). Spec requires coins_gained ≥200 (200-400 range) and buff_used field reflecting consumed boss_fight-scoped buff. Missing implementation between lines 1011 (apply_xp) and 1050 (return) — need to compute boss_coin (e.g., 200 + random or rank-based bonus up to 400) and call consume_active_buff(p, 'boss_fight') → boss_applied, then apply boss_mult effect if any.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "GET /api/profile/{id}/boss-fight/requirements",
+        "issue": "v6 dead-code line (deloads_done computed but unused) still present — cleanup only."
+      },
+      {
+        "endpoint": "general",
+        "issue": "server.py now 1656 lines — split overdue per >700-line guideline (carried from v5/v6)."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_hunter_v7.py",
+    "/app/test_reports/pytest/v7_results.xml"
+  ],
+  "action_items": [
+    "FIX boss-fight 500: define `boss_coin` (≥200, suggest 200 + random or rank-tier bonus to reach 200-400 per spec) and `boss_applied = consume_active_buff(p, 'boss_fight')` before the return statement in boss_fight handler (server.py ~line 1010-1050). Also apply boss_mult value if boss_applied.effect=='boss_mult' (multiplier to xp_reward) per v7 spec.",
+    "Update DB write `$set` block in boss-fight to persist the new `coins` value after coin_gain is added (currently writes `p.get('coins', 0)` which is unchanged because boss_coin never added).",
+    "Optional cleanup: remove dead deloads_done line and split server.py."
+  ],
+  "critical_code_review_comments": [
+    "boss_fight handler (lines 979-1061) is broken — response references undefined names. This means ALL prior 'boss-fight 200 OK' regression checks succeed only because previous tests trigger the 403 locked path; the 200 path was never exercised in v6 tests. v7 unlocked-path test surfaces the regression.",
+    "ITEM_CATALOG has exactly 10 items matching spec across training/recovery/xp/boss categories — verified.",
+    "consume_active_buff correctly handles 'workout_or_boss' scope items so legendary_aura can be consumed by either flow.",
+    "shop/buy correctly returns HTTPException(400, {'error': 'insufficient_coins', ...}) — FastAPI wraps this in {'detail': {...}} top-level. Frontend must read response.detail.error.",
+    "Loot drops always include >=1 item (guaranteed) with proper {type, rarity, rarity_color, name} structure for both 'coins' and 'item' drop types — UI can render uniformly.",
+    "Workout-log partial completion correctly skips coin_gain, loot_drops, and buff consumption — buff is preserved if workout_complete=false."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "96% (22/23)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "~14 TEST_v7_-prefixed profiles created during pytest. Not cleaned up — isolated by prefix.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "v7 shop/loot/inventory/buff fully validated EXCEPT boss-fight 200-path. After main agent defines boss_coin (200-400) and boss_applied = consume_active_buff(p, 'boss_fight') in server.py boss_fight handler, re-run /app/backend/tests/test_hunter_v7.py to verify TestBossFightV7::test_boss_fight_response_v7_fields passes. All other v7 endpoints (shop/catalog, inventory, shop/buy, inventory/activate) and v1-v6 regression endpoints confirmed working.",
+  "rca_of_issue": "RCA: boss_fight handler (server.py L979-1061) was extended in v7 to return coins_gained/buff_used but the assignment statements for those variables were never added. The handler currently mutates p with xp/rank/maxes/boss_fight_count but never computes coin_gain or consumes boss-scoped buffs. Reproduction: create profile sq160/bn100/dl200, log 6 full workouts to clear quest requirement, then POST /boss-fight with any payload → 500. Mitigation: between lines 1010 and 1050 add `boss_applied = consume_active_buff(p, 'boss_fight'); boss_coin = 200 + (rank-tier bonus, capped at 400); if boss_applied and boss_applied.get('effect')=='boss_mult': apply value to xp_reward; p['coins'] = p.get('coins', 0) + boss_coin` and add 'coins' to the $set update dict."
+}
