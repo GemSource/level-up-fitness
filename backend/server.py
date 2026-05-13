@@ -494,8 +494,12 @@ def check_achievements(profile: dict, completed_workouts: int) -> List[str]:
     if profile.get("max_session_volume_kg", 0) >= 10000: add("volume_session_10k")
     if profile.get("max_weekly_volume_kg", 0) >= 25000: add("volume_week_25k")
 
-    # Rank
-    add(f"rank_{profile.get('rank','E').lower()}")
+    # Rank — unlock current rank AND any lower ranks already passed
+    rank_chain = ["e", "d", "c", "b", "a", "s"]
+    current_rank = (profile.get("rank") or "E").lower()
+    if current_rank in rank_chain:
+        for r in rank_chain[: rank_chain.index(current_rank) + 1]:
+            add(f"rank_{r}")
     # (don't add ranks below — only current)
 
     # Special
@@ -713,7 +717,7 @@ async def log_workout(profile_id: str, data: WorkoutLogInput):
                 ndo = 1
         p["no_days_off_max"] = max(p.get("no_days_off_max", 0), max_ndo)
 
-    # Weekly bonus + perfect weeks + weekly volume bucket
+    # Weekly bonus + perfect weeks + weekly volume bucket (must precede apply_xp)
     if workout_complete:
         week_no = target_w["week"]
         week_workouts = [w for w in workouts if w["week"] == week_no]

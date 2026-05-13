@@ -1,51 +1,38 @@
-# Hunter Strength System — PRD
+# Hunter Strength System — PRD v3
 
 ## Vision
-Solo Leveling-inspired powerlifting tracker that gamifies strength training as a quest/rank progression system (E→S Rank, goal 1000kg total).
+Solo Leveling-inspired strength + cardio gamification with deep achievement system (84 trophies across 18 categories) and RPE-driven adaptive programming.
 
-## Core Mechanics (v2)
-### Weight Calculation
-`Training Weight = Current 1RM × Program Week % × Day Intensity Modifier`
-- Per-day modifier: SQUAT_DAY/DEADLIFT_DAY = BASE (±0%), BENCH_DAY = HIGH (+2.5%), accessories = LOW (-2.5%)
-- Barbell rounds to 2.5kg; Machine exercises (Lat Pulldown, Leg Press) round to 5kg
-- Goal ratio decoupled from daily weights — affects only ETA pacing, not load
+## v3 Highlights (Achievement Expansion)
+**84 achievements across 18 categories** with XP tiers (basic 50 / medium 100 / major 250 / elite 500):
+- Strength: Squat, Bench, Deadlift (6 thresholds each)
+- Total: 500/600/700/800/900/1000kg
+- Quests: 1/5/10/25/50/100 completed
+- Weekly: 1/2/4/8 perfect weeks
+- Streak: 3/7/14/30 day streak
+- Run: distance (1/3/5/10km), total (10/25/50/100/250km), pace (sub 6/5:30/5/4:30 per km)
+- Sprint: 100m<20s, 200m<40s, 400m<90s
+- Bike: distance (5/10/20/50km), total (50/100/250/500km)
+- Quality: First RPE-all-logged, perfect workouts (1/5/10)
+- Elite ratios: 2x BW squat, 1.5x BW bench, 2.5x BW deadlift
+- Hybrid: Lift+Run 5x, Lift+Bike 5x
+- Volume: 10,000kg session, 25,000kg week
+- Rank: E/D/C/B/A/S (auto-unlocks all prior ranks when ranking up)
+- Special: 7-day no-days-off, Comeback Arc (5+ day return), Night Hunter (>9pm), Early Hunter (<6am)
+- Boss: Boss Slayer
 
-### RPE-Driven Progression
-- Logged RPE < Target → +2.5kg applied to all remaining uncompleted same-day_type workouts
-- Logged RPE == Target → hold
-- Logged RPE > Target → −2.5kg applied
-- Stored per-lift in `pending_adjustments` on profile
-
-### Goal-Based Scaling (display only)
-- Ratio < 1.25 → conservative (ETA ~1–2.5kg/week)
-- Ratio 1.25–1.75 → moderate (ETA ~2.5–5kg/week)
-- Ratio > 1.75 → aggressive (ETA ~5–7.5kg/week)
-
-### XP System
-- +20 per exercise done
-- +50 main lift done
-- +100 bonus when all exercises done
-- +50 bonus when all done-exercises have RPE logged
-- +300 weekly perfect bonus / +200 deload week bonus
-- +1000 Boss Fight reward
-- Levels: 500 XP base, +250 per level
-
-### Rank Thresholds
-E (<500) → D (500-599) → C (600-699) → B (700-799) → A (800-899) → S (900+)
-
-### Block Structure
-- 6 weeks: W1-4 Build / W5 Heavy / W6 Deload
-- Days customized by training_days (3-6)
-- Every 12 weeks → Boss Fight regenerates block from new maxes
+## Endpoints (v3)
+- `POST /api/profile/{id}/cardio` — new endpoint for run/bike/sprint logging with auto-achievement detection
 
 ## Tech
-- Backend: FastAPI + MongoDB (motor), single embedded profile doc with workouts array
+- Backend: FastAPI + MongoDB; emergentintegrations for Claude Sonnet 4.5 AI coach
 - Frontend: Expo Router + React Native
-- LLM: emergentintegrations → Claude Sonnet 4.5 (in-character System Coach)
-- No auth — local profile_id in AsyncStorage
+- 34/34 backend tests pass; AI coach hits real Anthropic via Emergent LLM key
 
-## UI Screens
-1. Onboarding (4-step) → 2. Dashboard (Status) → 3. Quest log (filter by week) → 4. Workout log (row-per-exercise, Done checkbox, live progress bar) → 5. Progress (goal %, history, mode badge, ETA range) → 6. Rank/Achievements (rank ladder + 12 trophies) → 7. Boss Fight (max test + animated rank-up) → 8. AI Coach modal
+## UI
+- New `/cardio.tsx` modal with activity picker (run/bike/sprint)
+- Rebuilt Rank tab: horizontal category filter (ALL · 84, RANK 1/6, QUESTS 2/5, …), tier-colored badges + XP labels
+- Dashboard now shows both `CARDIO LOG` and `BOSS FIGHT` action buttons
 
 ## Design
-Heavy Solo-Leveling: neon cyan/danger red on void black, Rajdhani + JetBrains Mono, sharp corner frames, [SYSTEM] alerts, rank-tier colored badges.
+Solo-Leveling system aesthetic: neon cyan + tier colors (basic green / medium cyan / major purple / elite gold), Rajdhani + JetBrains Mono.
