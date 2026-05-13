@@ -414,7 +414,7 @@ async def log_workout(profile_id: str, data: WorkoutLogInput):
             p["streak"] = 1
         p["last_workout_date"] = today
 
-    # Weekly bonus
+    # Weekly bonus (added BEFORE apply_xp so it persists correctly)
     if workout_complete:
         week_no = target_w["week"]
         week_workouts = [w for w in workouts if w["week"] == week_no]

@@ -22,6 +22,11 @@ export default function Dashboard() {
       const d = await getDashboard(id);
       setData(d);
     } catch (e: any) {
+      if (e?.response?.status === 404) {
+        await AsyncStorage.removeItem('profile_id');
+        router.replace('/onboarding');
+        return;
+      }
       console.log('dash err', e?.message);
     }
   };
@@ -207,6 +212,7 @@ const styles = StyleSheet.create({
   bossText: { color: Colors.danger, fontFamily: Fonts.heading, fontSize: 14, letterSpacing: 3 },
   resetBtn: { marginTop: 24, alignItems: 'center', padding: 10 },
   resetText: { color: Colors.textDim, fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 2 },
-});
-,
+  modeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  modeBadge: { color: Colors.primary, fontFamily: Fonts.monoBold, fontSize: 9, letterSpacing: 2, paddingHorizontal: 6, paddingVertical: 3, borderWidth: 1, borderColor: Colors.borderGlow, backgroundColor: 'rgba(0,255,255,0.06)' },
+  etaText: { color: Colors.textMuted, fontFamily: Fonts.mono, fontSize: 9, letterSpacing: 1 },
 });
