@@ -5,17 +5,20 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Fonts, rankColor } from '../../src/theme';
 import { SystemFrame } from '../../src/components/SystemFrame';
-import { getProgress } from '../../src/api';
+import { RankProgressCard } from '../../src/components/RankProgressCard';
+import { getProgress, getRankProgress } from '../../src/api';
 
 export default function Progress() {
   const router = useRouter();
   const [data, setData] = useState<any>(null);
+  const [rankProg, setRankProg] = useState<any>(null);
 
   const load = async () => {
     const id = await AsyncStorage.getItem('profile_id');
     if (!id) { router.replace('/onboarding'); return; }
-    const d = await getProgress(id);
+    const [d, rp] = await Promise.all([getProgress(id), getRankProgress(id)]);
     setData(d);
+    setRankProg(rp);
   };
 
   useFocusEffect(useCallback(() => { load(); }, []));
@@ -30,6 +33,9 @@ export default function Progress() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.system}>[PROGRESS LOG]</Text>
         <Text style={styles.title}>HUNTER METRICS</Text>
+
+        <Text style={styles.sectionLabel}>// RANK PROGRESS TRACKER</Text>
+        {rankProg && <RankProgressCard data={rankProg} />}
 
         <SystemFrame style={styles.card} color={rc}>
           <Text style={styles.label}>// GOAL PROGRESS</Text>

@@ -8,19 +8,22 @@ import { Colors, Fonts, rankColor } from '../../src/theme';
 import { SystemFrame } from '../../src/components/SystemFrame';
 import { RankBadge } from '../../src/components/RankBadge';
 import { XPBar } from '../../src/components/XPBar';
-import { getDashboard } from '../../src/api';
+import { RankProgressCard } from '../../src/components/RankProgressCard';
+import { getDashboard, getRankProgress } from '../../src/api';
 
 export default function Dashboard() {
   const router = useRouter();
   const [data, setData] = useState<any>(null);
+  const [rankProg, setRankProg] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = async () => {
     const id = await AsyncStorage.getItem('profile_id');
     if (!id) { router.replace('/onboarding'); return; }
     try {
-      const d = await getDashboard(id);
+      const [d, rp] = await Promise.all([getDashboard(id), getRankProgress(id)]);
       setData(d);
+      setRankProg(rp);
     } catch (e: any) {
       if (e?.response?.status === 404) {
         await AsyncStorage.removeItem('profile_id');
@@ -101,6 +104,13 @@ export default function Dashboard() {
             )}
           </View>
         </SystemFrame>
+
+        {rankProg && (
+          <>
+            <Text style={styles.sectionLabel}>// NEXT RANK PROGRESS</Text>
+            <RankProgressCard data={rankProg} compact />
+          </>
+        )}
 
         <View style={styles.statsRow}>
           <SystemFrame style={styles.statCard}>

@@ -1170,6 +1170,94 @@ async def log_cardio(profile_id: str, data: CardioInput):
     }
 
 
+@api_router.get("/profile/{profile_id}/rank-progress")
+async def rank_progress(profile_id: str):
+    p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Profile not found")
+    total = p.get("total", 0)
+    current_rank = p.get("rank", "E")
+    nr = next_rank_info(total)
+    next_rank_name = nr["rank"]
+    threshold = nr["threshold"]
+    rank_up = current_rank == "S"
+    remaining = max(0, threshold - total) if not rank_up else 0
+    pct = 100.0 if rank_up else min(100.0, (total / max(threshold, 1)) * 100.0)
+
+    # Lift contribution breakdown — suggest a balanced lift-up
+    sq = p.get("squat_max", 0)
+    bn = p.get("bench_max", 0)
+    dl = p.get("deadlift_max", 0)
+    # Typical powerlifting ratios: squat ~35-37%, bench ~25-27%, deadlift ~38-40% of total
+    ideal_shares = {"squat": 0.36, "bench": 0.26, "deadlift": 0.38}
+    contribs = {}
+    if remaining > 0:
+        # weight each lift by how UNDER-ideal it currently is (% gap)
+        current_shares = {
+            "squat": sq / max(total, 1),
+            "bench": bn / max(total, 1),
+            "deadlift": dl / max(total, 1),
+        }
+        # gap = ideal - current (lifts that are weaker relative to ideal get more recommended kg)
+        gaps = {k: max(0.05, ideal_shares[k] - current_shares[k] + 0.15) for k in ideal_shares}
+        gap_sum = sum(gaps.values()) or 1.0
+        for k in ideal_shares:
+            contribs[k] = round_to_2_5(remaining * (gaps[k] / gap_sum))
+
+    # Projected rank-up date — based on starting total vs current, divided by weeks elapsed
+    projected_weeks: Optional[Dict[str, int]] = None
+    if not rank_up and remaining > 0:
+        start_total = p.get("starting_total", total)
+        block_start = p.get("block_start_date") or p.get("created_at")
+        gained = total - start_total
+        try:
+            start_dt = datetime.fromisoformat(block_start)
+            now = datetime.now(timezone.utc)
+            weeks_elapsed = max(1, (now - start_dt).days / 7)
+        except Exception:
+            weeks_elapsed = 1
+        if gained > 0:
+            rate = gained / weeks_elapsed  # kg/week
+            est = remaining / rate
+            projected_weeks = {"min": max(1, int(est * 0.8)), "max": max(2, int(est * 1.3))}
+        else:
+            mode = p.get("progression_mode", "moderate")
+            rng = {"conservative": (1.0, 2.5), "moderate": (2.5, 5.0), "aggressive": (5.0, 7.5)}[mode]
+            projected_weeks = {"min": int(remaining / rng[1]), "max": int(remaining / rng[0])}
+
+    # Dynamic motivational message
+    if rank_up:
+        message = "[SYSTEM]: You are the Monarch. The System acknowledges no peers."
+    elif pct >= 95:
+        weakest = max(contribs.items(), key=lambda kv: kv[1])[0] if contribs else "lifts"
+        message = f"[ALERT]: Almost there. One strong week could rank you up. Push your {weakest}."
+    elif pct >= 75:
+        weakest = max(contribs.items(), key=lambda kv: kv[1])[0] if contribs else "deadlift"
+        message = f"[SYSTEM]: {remaining:.0f}kg away from {next_rank_name} Rank. Focus on your {weakest} to break through."
+    elif pct >= 50:
+        message = f"[QUEST]: Steady progression detected. {remaining:.0f}kg to {next_rank_name}."
+    else:
+        message = f"[SYSTEM]: The path is long. Forge each quest deliberately."
+
+    return {
+        "current_rank": current_rank,
+        "next_rank": next_rank_name,
+        "next_threshold_kg": threshold,
+        "current_total": total,
+        "remaining_kg": remaining,
+        "progress_pct": round(pct, 1),
+        "lift_contributions": contribs,
+        "xp": {
+            "current": p.get("xp", 0),
+            "level": p.get("level", 1),
+            "next_level_xp": xp_for_level(p.get("level", 1)),
+        },
+        "projected_weeks": projected_weeks,
+        "message": message,
+        "rank_up": rank_up,
+    }
+
+
 @api_router.post("/profile/{profile_id}/ai-coach")
 async def ai_coach(profile_id: str, data: AICoachInput):
     p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})

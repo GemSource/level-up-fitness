@@ -17,3 +17,4 @@ export const bossFight = (id: string, payload: any) => api.post(`/profile/${id}/
 export const getAchievements = (id: string) => api.get(`/profile/${id}/achievements`).then(r => r.data);
 export const getProgress = (id: string) => api.get(`/profile/${id}/progress`).then(r => r.data);
 export const askCoach = (id: string, question?: string) => api.post(`/profile/${id}/ai-coach`, { question }).then(r => r.data);
+export const getRankProgress = (id: string) => api.get(`/profile/${id}/rank-progress`).then(r => r.data);
