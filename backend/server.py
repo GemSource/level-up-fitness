@@ -55,6 +55,38 @@ class Profile(BaseModel):
     boss_fight_count: int = 0
     achievements: List[str] = []
     pending_adjustments: Dict[str, float] = {"squat": 0.0, "bench": 0.0, "deadlift": 0.0}
+    # Aggregate stats for achievements
+    total_run_km: float = 0.0
+    total_bike_km: float = 0.0
+    longest_run_km: float = 0.0
+    longest_bike_km: float = 0.0
+    best_run_pace_sec_per_km: Optional[float] = None
+    best_sprint_100m: Optional[float] = None
+    best_sprint_200m: Optional[float] = None
+    best_sprint_400m: Optional[float] = None
+    perfect_workouts: int = 0
+    perfect_weeks: int = 0
+    weeks_completed: List[int] = []
+    longest_streak: int = 0
+    max_session_volume_kg: float = 0.0
+    max_weekly_volume_kg: float = 0.0
+    weekly_volume_log: Dict[str, float] = {}  # iso-week → kg
+    cardio_dates: List[str] = []  # ISO dates of cardio sessions
+    workout_dates: List[str] = []  # ISO dates of completed workouts
+    hybrid_run_sessions: int = 0
+    hybrid_bike_sessions: int = 0
+    night_sessions: int = 0
+    early_sessions: int = 0
+    comeback_count: int = 0
+    no_days_off_max: int = 0  # consecutive days trained (lift OR cardio)
+
+class CardioInput(BaseModel):
+    activity: str  # "run" | "bike" | "sprint"
+    distance_km: Optional[float] = None  # for run/bike
+    duration_sec: Optional[float] = None
+    sprint_distance_m: Optional[int] = None  # 100/200/400
+    sprint_time_sec: Optional[float] = None
+    notes: Optional[str] = None
 
 class ExerciseLogRow(BaseModel):
     name: str
@@ -242,40 +274,246 @@ def generate_block(squat: float, bench: float, deadlift: float, training_days: i
 def bodyweight_safe(x):
     return max(40, x * 0.5)
 
-# ---------------- Achievements ----------------
+# ---------------- Achievements V2 (60+) ----------------
+# tier: basic=50, medium=100, major=250, elite=500 XP
+def _ach(name, desc, category, tier="basic"):
+    return {"name": name, "desc": desc, "category": category, "tier": tier}
+
 ACHIEVEMENTS = {
-    "first_workout": {"name": "First Awakening", "desc": "Complete your first quest"},
-    "five_workouts": {"name": "Apprentice Hunter", "desc": "Complete 5 quests"},
-    "perfect_week": {"name": "Perfect Week", "desc": "Complete all workouts in a week"},
-    "squat_200": {"name": "200kg Squat", "desc": "Squat 200kg or more"},
-    "bench_140": {"name": "140kg Bench", "desc": "Bench 140kg or more"},
-    "deadlift_240": {"name": "240kg Deadlift", "desc": "Deadlift 240kg or more"},
-    "rank_d": {"name": "Reached D Rank", "desc": "Achieve D Rank"},
-    "rank_c": {"name": "Reached C Rank", "desc": "Achieve C Rank"},
-    "rank_b": {"name": "Reached B Rank", "desc": "Achieve B Rank"},
-    "rank_a": {"name": "Reached A Rank", "desc": "Achieve A Rank"},
-    "rank_s": {"name": "S Rank Hunter", "desc": "Achieve S Rank — Monarch"},
-    "boss_slayer": {"name": "Boss Slayer", "desc": "Complete a Boss Fight"},
+    # Strength: Squat
+    "squat_100": _ach("100kg Squat", "Squat 100kg or more", "Squat", "basic"),
+    "squat_140": _ach("140kg Squat", "Squat 140kg or more", "Squat", "basic"),
+    "squat_180": _ach("180kg Squat", "Squat 180kg or more", "Squat", "medium"),
+    "squat_200": _ach("200kg Squat", "Squat 200kg or more", "Squat", "medium"),
+    "squat_220": _ach("220kg Squat", "Squat 220kg or more", "Squat", "major"),
+    "squat_250": _ach("250kg Squat", "Squat 250kg or more", "Squat", "elite"),
+    # Strength: Bench
+    "bench_100": _ach("100kg Bench", "Bench 100kg or more", "Bench", "basic"),
+    "bench_140": _ach("140kg Bench", "Bench 140kg or more", "Bench", "basic"),
+    "bench_160": _ach("160kg Bench", "Bench 160kg or more", "Bench", "medium"),
+    "bench_180": _ach("180kg Bench", "Bench 180kg or more", "Bench", "medium"),
+    "bench_200": _ach("200kg Bench", "Bench 200kg or more", "Bench", "major"),
+    "bench_220": _ach("220kg Bench", "Bench 220kg or more", "Bench", "elite"),
+    # Strength: Deadlift
+    "deadlift_140": _ach("140kg Deadlift", "Deadlift 140kg or more", "Deadlift", "basic"),
+    "deadlift_180": _ach("180kg Deadlift", "Deadlift 180kg or more", "Deadlift", "basic"),
+    "deadlift_220": _ach("220kg Deadlift", "Deadlift 220kg or more", "Deadlift", "medium"),
+    "deadlift_240": _ach("240kg Deadlift", "Deadlift 240kg or more", "Deadlift", "medium"),
+    "deadlift_260": _ach("260kg Deadlift", "Deadlift 260kg or more", "Deadlift", "major"),
+    "deadlift_300": _ach("300kg Deadlift", "Deadlift 300kg or more", "Deadlift", "elite"),
+    # Total
+    "total_500": _ach("500kg Total", "Reach a 500kg powerlifting total", "Total", "basic"),
+    "total_600": _ach("600kg Total", "Reach a 600kg powerlifting total", "Total", "medium"),
+    "total_700": _ach("700kg Total", "Reach a 700kg powerlifting total", "Total", "medium"),
+    "total_800": _ach("800kg Total", "Reach an 800kg powerlifting total", "Total", "major"),
+    "total_900": _ach("900kg Total", "Reach a 900kg powerlifting total", "Total", "major"),
+    "total_1000": _ach("1000kg Total — Final Boss", "Conquer the 1000kg total", "Total", "elite"),
+    # Quest count
+    "quests_5": _ach("Apprentice Hunter", "Complete 5 quests", "Quests", "basic"),
+    "quests_10": _ach("Seasoned Hunter", "Complete 10 quests", "Quests", "basic"),
+    "quests_25": _ach("Veteran Hunter", "Complete 25 quests", "Quests", "medium"),
+    "quests_50": _ach("Elite Hunter", "Complete 50 quests", "Quests", "major"),
+    "quests_100": _ach("Master Hunter", "Complete 100 quests", "Quests", "elite"),
+    # Weekly consistency
+    "perfect_week_1": _ach("Perfect Week", "Complete all workouts in one week", "Weekly", "basic"),
+    "perfect_week_2": _ach("Two Perfect Weeks", "Two perfect training weeks", "Weekly", "medium"),
+    "perfect_week_4": _ach("Four Perfect Weeks", "Four perfect training weeks", "Weekly", "major"),
+    "perfect_week_8": _ach("Eight Perfect Weeks", "Eight perfect training weeks", "Weekly", "elite"),
+    # Streak
+    "streak_3": _ach("3 Day Streak", "Train 3 days in a row", "Streak", "basic"),
+    "streak_7": _ach("7 Day Streak", "Train 7 days in a row", "Streak", "medium"),
+    "streak_14": _ach("14 Day Streak", "Train 14 days in a row", "Streak", "major"),
+    "streak_30": _ach("30 Day Streak", "Train 30 days in a row", "Streak", "elite"),
+    # Running distance (single session)
+    "run_1k": _ach("First Mile-ish", "Run 1km in a single session", "Run", "basic"),
+    "run_3k": _ach("3km Run", "Run 3km in a single session", "Run", "basic"),
+    "run_5k": _ach("5km Run", "Run 5km in a single session", "Run", "medium"),
+    "run_10k": _ach("10km Run", "Run 10km in a single session", "Run", "major"),
+    # Running total
+    "run_total_10": _ach("10km Runner", "Run 10km accumulated", "Run", "basic"),
+    "run_total_25": _ach("25km Runner", "Run 25km accumulated", "Run", "basic"),
+    "run_total_50": _ach("50km Runner", "Run 50km accumulated", "Run", "medium"),
+    "run_total_100": _ach("100km Runner", "Run 100km accumulated", "Run", "major"),
+    "run_total_250": _ach("250km Runner", "Run 250km accumulated", "Run", "elite"),
+    # Pace
+    "pace_sub_6": _ach("Sub 6:00/km", "Run a session at sub-6:00 per km", "Pace", "basic"),
+    "pace_sub_5_30": _ach("Sub 5:30/km", "Run a session at sub-5:30 per km", "Pace", "medium"),
+    "pace_sub_5": _ach("Sub 5:00/km", "Run a session at sub-5:00 per km", "Pace", "major"),
+    "pace_sub_4_30": _ach("Sub 4:30/km", "Run a session at sub-4:30 per km", "Pace", "elite"),
+    # Sprints
+    "sprint_100_20": _ach("100m under 20s", "Sprint 100m under 20 seconds", "Sprint", "basic"),
+    "sprint_200_40": _ach("200m under 40s", "Sprint 200m under 40 seconds", "Sprint", "medium"),
+    "sprint_400_90": _ach("400m under 90s", "Sprint 400m under 90 seconds", "Sprint", "major"),
+    # Bike single ride
+    "bike_5": _ach("5km Ride", "Cycle 5km in a single ride", "Bike", "basic"),
+    "bike_10": _ach("10km Ride", "Cycle 10km in a single ride", "Bike", "basic"),
+    "bike_20": _ach("20km Ride", "Cycle 20km in a single ride", "Bike", "medium"),
+    "bike_50": _ach("50km Ride", "Cycle 50km in a single ride", "Bike", "major"),
+    # Bike total
+    "bike_total_50": _ach("50km Cyclist", "Cycle 50km accumulated", "Bike", "basic"),
+    "bike_total_100": _ach("100km Cyclist", "Cycle 100km accumulated", "Bike", "medium"),
+    "bike_total_250": _ach("250km Cyclist", "Cycle 250km accumulated", "Bike", "major"),
+    "bike_total_500": _ach("500km Cyclist", "Cycle 500km accumulated", "Bike", "elite"),
+    # Workout quality
+    "rpe_first": _ach("Calibrated", "Log RPE for every exercise in a session", "Quality", "basic"),
+    "perfect_workout_1": _ach("Perfect Workout", "Hit every prescribed set/rep target", "Quality", "basic"),
+    "perfect_workout_5": _ach("Five Perfect Workouts", "Five flawless quests", "Quality", "medium"),
+    "perfect_workout_10": _ach("Ten Perfect Workouts", "Ten flawless quests", "Quality", "major"),
+    # Elite bodyweight ratios
+    "squat_specialist": _ach("Squat Specialist", "Squat 2x bodyweight", "Elite", "major"),
+    "bench_technician": _ach("Bench Technician", "Bench 1.5x bodyweight", "Elite", "major"),
+    "deadlift_monster": _ach("Deadlift Monster", "Deadlift 2.5x bodyweight", "Elite", "elite"),
+    # Hybrid
+    "hybrid_run_5": _ach("Iron + Mile", "Lift + run same session 5 times", "Hybrid", "medium"),
+    "hybrid_bike_5": _ach("Iron + Wheels", "Lift + bike same session 5 times", "Hybrid", "medium"),
+    # Volume
+    "volume_session_10k": _ach("10,000kg Session", "Lift 10,000kg total in one session", "Volume", "medium"),
+    "volume_week_25k": _ach("25,000kg Week", "Lift 25,000kg total in one week", "Volume", "major"),
+    # Rank progression
+    "rank_e": _ach("Awakened — E Rank", "Reach E Rank", "Rank", "basic"),
+    "rank_d": _ach("Reached D Rank", "Reach D Rank", "Rank", "basic"),
+    "rank_c": _ach("Reached C Rank", "Reach C Rank", "Rank", "medium"),
+    "rank_b": _ach("Reached B Rank", "Reach B Rank", "Rank", "medium"),
+    "rank_a": _ach("Reached A Rank", "Reach A Rank", "Rank", "major"),
+    "rank_s": _ach("S Rank — Monarch", "Reach S Rank", "Rank", "elite"),
+    # Special / fun
+    "no_days_off_7": _ach("No Days Off", "Train 7 consecutive days (lift or cardio)", "Special", "medium"),
+    "comeback_arc": _ach("Comeback Arc", "Return after 5+ missed days", "Special", "basic"),
+    "night_session": _ach("Night Hunter", "Train after 9pm", "Special", "basic"),
+    "early_hunter": _ach("Early Hunter", "Train before 6am", "Special", "basic"),
+    # Boss / first
+    "first_workout": _ach("First Awakening", "Complete your first quest", "Quests", "basic"),
+    "boss_slayer": _ach("Boss Slayer", "Complete a Boss Fight", "Boss", "major"),
 }
 
+TIER_XP = {"basic": 50, "medium": 100, "major": 250, "elite": 500}
+
 def check_achievements(profile: dict, completed_workouts: int) -> List[str]:
-    new = []
+    """Returns list of NEWLY unlocked achievement keys. Awards XP for each."""
     a = set(profile.get("achievements", []))
+    new: List[str] = []
+
     def add(key):
         if key not in a:
             a.add(key)
             new.append(key)
+
+    sq = profile.get("squat_max", 0)
+    bn = profile.get("bench_max", 0)
+    dl = profile.get("deadlift_max", 0)
+    total = profile.get("total", 0)
+    bw = profile.get("bodyweight", 1) or 1
+
+    # Strength single-lift
+    for thr in [100, 140, 180, 200, 220, 250]:
+        if sq >= thr: add(f"squat_{thr}")
+    for thr in [100, 140, 160, 180, 200, 220]:
+        if bn >= thr: add(f"bench_{thr}")
+    for thr in [140, 180, 220, 240, 260, 300]:
+        if dl >= thr: add(f"deadlift_{thr}")
+
+    # Total
+    for thr in [500, 600, 700, 800, 900, 1000]:
+        if total >= thr: add(f"total_{thr}")
+
+    # Quest counts
     if completed_workouts >= 1: add("first_workout")
-    if completed_workouts >= 5: add("five_workouts")
-    if profile["squat_max"] >= 200: add("squat_200")
-    if profile["bench_max"] >= 140: add("bench_140")
-    if profile["deadlift_max"] >= 240: add("deadlift_240")
-    rank = profile["rank"]
-    for r in ["D","C","B","A","S"]:
-        if rank == r:
-            add(f"rank_{r.lower()}")
+    for thr in [5, 10, 25, 50, 100]:
+        if completed_workouts >= thr: add(f"quests_{thr}")
+
+    # Perfect weeks
+    pw = profile.get("perfect_weeks", 0)
+    if pw >= 1: add("perfect_week_1")
+    if pw >= 2: add("perfect_week_2")
+    if pw >= 4: add("perfect_week_4")
+    if pw >= 8: add("perfect_week_8")
+
+    # Streak
+    streak = max(profile.get("streak", 0), profile.get("longest_streak", 0))
+    for thr in [3, 7, 14, 30]:
+        if streak >= thr: add(f"streak_{thr}")
+
+    # Running
+    lr = profile.get("longest_run_km", 0)
+    if lr >= 1: add("run_1k")
+    if lr >= 3: add("run_3k")
+    if lr >= 5: add("run_5k")
+    if lr >= 10: add("run_10k")
+    tr = profile.get("total_run_km", 0)
+    if tr >= 10: add("run_total_10")
+    if tr >= 25: add("run_total_25")
+    if tr >= 50: add("run_total_50")
+    if tr >= 100: add("run_total_100")
+    if tr >= 250: add("run_total_250")
+
+    # Pace (lower seconds-per-km = faster)
+    pace = profile.get("best_run_pace_sec_per_km")
+    if pace is not None:
+        if pace < 360: add("pace_sub_6")
+        if pace < 330: add("pace_sub_5_30")
+        if pace < 300: add("pace_sub_5")
+        if pace < 270: add("pace_sub_4_30")
+
+    # Sprints
+    if profile.get("best_sprint_100m") is not None and profile["best_sprint_100m"] < 20:
+        add("sprint_100_20")
+    if profile.get("best_sprint_200m") is not None and profile["best_sprint_200m"] < 40:
+        add("sprint_200_40")
+    if profile.get("best_sprint_400m") is not None and profile["best_sprint_400m"] < 90:
+        add("sprint_400_90")
+
+    # Bike
+    lb = profile.get("longest_bike_km", 0)
+    if lb >= 5: add("bike_5")
+    if lb >= 10: add("bike_10")
+    if lb >= 20: add("bike_20")
+    if lb >= 50: add("bike_50")
+    tb = profile.get("total_bike_km", 0)
+    if tb >= 50: add("bike_total_50")
+    if tb >= 100: add("bike_total_100")
+    if tb >= 250: add("bike_total_250")
+    if tb >= 500: add("bike_total_500")
+
+    # Quality
+    if profile.get("rpe_logged_once"): add("rpe_first")
+    pwo = profile.get("perfect_workouts", 0)
+    if pwo >= 1: add("perfect_workout_1")
+    if pwo >= 5: add("perfect_workout_5")
+    if pwo >= 10: add("perfect_workout_10")
+
+    # Elite bodyweight ratios
+    if sq >= bw * 2.0: add("squat_specialist")
+    if bn >= bw * 1.5: add("bench_technician")
+    if dl >= bw * 2.5: add("deadlift_monster")
+
+    # Hybrid
+    if profile.get("hybrid_run_sessions", 0) >= 5: add("hybrid_run_5")
+    if profile.get("hybrid_bike_sessions", 0) >= 5: add("hybrid_bike_5")
+
+    # Volume
+    if profile.get("max_session_volume_kg", 0) >= 10000: add("volume_session_10k")
+    if profile.get("max_weekly_volume_kg", 0) >= 25000: add("volume_week_25k")
+
+    # Rank
+    add(f"rank_{profile.get('rank','E').lower()}")
+    # (don't add ranks below — only current)
+
+    # Special
+    if profile.get("no_days_off_max", 0) >= 7: add("no_days_off_7")
+    if profile.get("comeback_count", 0) >= 1: add("comeback_arc")
+    if profile.get("night_sessions", 0) >= 1: add("night_session")
+    if profile.get("early_sessions", 0) >= 1: add("early_hunter")
     if profile.get("boss_fight_count", 0) >= 1: add("boss_slayer")
+
     profile["achievements"] = list(a)
+    # Award XP for each new unlock
+    xp_bonus = 0
+    for k in new:
+        tier = ACHIEVEMENTS.get(k, {}).get("tier", "basic")
+        xp_bonus += TIER_XP.get(tier, 50)
+    if xp_bonus > 0:
+        apply_xp(profile, xp_bonus)
+    profile["achievement_xp_last"] = xp_bonus
     return new
 
 # ---------------- Routes ----------------
@@ -384,37 +622,98 @@ async def log_workout(profile_id: str, data: WorkoutLogInput):
             xp_gained += 50
     if total_ex > 0 and len(done_ex) == total_ex:
         xp_gained += 100  # all done bonus
-    if all((ex.logged_rpe is not None) for ex in done_ex) and done_ex:
+    all_rpe_logged = bool(done_ex) and all((ex.logged_rpe is not None) for ex in done_ex)
+    if all_rpe_logged:
         xp_gained += 50  # all RPE logged
 
     # Mark workout complete only if every required exercise is done
     workout_complete = (total_ex > 0 and len(done_ex) == total_ex)
 
+    # ---- Track aggregate stats for achievements ----
+    # Session volume
+    session_volume_kg = 0.0
+    for ex in done_ex:
+        if ex.logged_weight and ex.logged_reps and ex.target_sets:
+            session_volume_kg += float(ex.logged_weight) * int(ex.logged_reps) * int(ex.target_sets)
+    if session_volume_kg > p.get("max_session_volume_kg", 0):
+        p["max_session_volume_kg"] = session_volume_kg
+
+    # Perfect workout: every exercise done AND every logged_reps >= target_reps
+    is_perfect = workout_complete and all(
+        (ex.logged_reps is not None and ex.logged_reps >= ex.target_reps) for ex in done_ex
+    )
+    if is_perfect:
+        p["perfect_workouts"] = p.get("perfect_workouts", 0) + 1
+
+    # First-time RPE-all-logged
+    if all_rpe_logged:
+        p["rpe_logged_once"] = True
+
+    # Time-of-day tracking
+    now = datetime.now(timezone.utc)
+    hr = now.hour
+    if hr >= 21 or hr < 2:
+        p["night_sessions"] = p.get("night_sessions", 0) + 1
+    if 3 <= hr < 6:
+        p["early_sessions"] = p.get("early_sessions", 0) + 1
+
+    target_w["session_volume_kg"] = session_volume_kg
     target_w["logs"] = [ex.model_dump() for ex in data.exercises]
     target_w["notes"] = data.notes
     target_w["completed"] = workout_complete
     if workout_complete:
-        target_w["completed_at"] = datetime.now(timezone.utc).isoformat()
+        target_w["completed_at"] = now.isoformat()
     target_w["xp_gained"] = xp_gained
 
-    # Streak only advances on a completed quest
+    # Streak + comeback + workout dates + no_days_off
     if workout_complete:
-        today = datetime.now(timezone.utc).date().isoformat()
+        today = now.date().isoformat()
         last = p.get("last_workout_date")
         if last:
-            last_date = datetime.fromisoformat(last).date()
-            diff = (datetime.now(timezone.utc).date() - last_date).days
+            try:
+                last_date = datetime.fromisoformat(last).date()
+            except Exception:
+                last_date = now.date()
+            diff = (now.date() - last_date).days
             if diff == 0:
                 pass
             elif diff == 1:
                 p["streak"] = p.get("streak", 0) + 1
             else:
+                if diff >= 5:
+                    p["comeback_count"] = p.get("comeback_count", 0) + 1
                 p["streak"] = 1
         else:
             p["streak"] = 1
         p["last_workout_date"] = today
+        p["longest_streak"] = max(p.get("longest_streak", 0), p.get("streak", 0))
 
-    # Weekly bonus (added BEFORE apply_xp so it persists correctly)
+        wd = set(p.get("workout_dates", []))
+        wd.add(today)
+        p["workout_dates"] = list(wd)
+
+        # Hybrid same-session detection
+        cardio_today = today in set(p.get("cardio_dates", []))
+        if cardio_today:
+            # find activity types today (best-effort: count any same-day cardio session of type)
+            p["hybrid_run_sessions"] = p.get("hybrid_run_sessions", 0) + (1 if p.get("_last_cardio_activity") == "run" else 0)
+            p["hybrid_bike_sessions"] = p.get("hybrid_bike_sessions", 0) + (1 if p.get("_last_cardio_activity") == "bike" else 0)
+
+        # No-days-off: consecutive days with lift OR cardio
+        all_dates = sorted(set(p.get("workout_dates", [])) | set(p.get("cardio_dates", [])))
+        ndo = 1
+        max_ndo = 1
+        for i in range(1, len(all_dates)):
+            d1 = datetime.fromisoformat(all_dates[i-1]).date()
+            d2 = datetime.fromisoformat(all_dates[i]).date()
+            if (d2 - d1).days == 1:
+                ndo += 1
+                max_ndo = max(max_ndo, ndo)
+            else:
+                ndo = 1
+        p["no_days_off_max"] = max(p.get("no_days_off_max", 0), max_ndo)
+
+    # Weekly bonus + perfect weeks + weekly volume bucket
     if workout_complete:
         week_no = target_w["week"]
         week_workouts = [w for w in workouts if w["week"] == week_no]
@@ -422,6 +721,21 @@ async def log_workout(profile_id: str, data: WorkoutLogInput):
             xp_gained += 300
             if week_no == 6:
                 xp_gained += 200  # deload
+            done_weeks = set(p.get("weeks_completed", []))
+            # Use block_start_date + week to make a unique key
+            week_key = f"{p.get('block_start_date','')[:10]}:W{week_no}"
+            if week_key not in done_weeks:
+                done_weeks.add(week_key)
+                p["weeks_completed"] = list(done_weeks)
+                p["perfect_weeks"] = p.get("perfect_weeks", 0) + 1
+        # Weekly volume bucket (ISO year-week)
+        iso_yr, iso_wk, _ = now.date().isocalendar()
+        wk_key = f"{iso_yr}-W{iso_wk:02d}"
+        wkv = dict(p.get("weekly_volume_log", {}))
+        wkv[wk_key] = float(wkv.get(wk_key, 0.0)) + session_volume_kg
+        p["weekly_volume_log"] = wkv
+        if wkv[wk_key] > p.get("max_weekly_volume_kg", 0):
+            p["max_weekly_volume_kg"] = wkv[wk_key]
 
     apply_xp(p, xp_gained)
 
@@ -473,9 +787,24 @@ async def log_workout(profile_id: str, data: WorkoutLogInput):
             "xp": p["xp"],
             "level": p["level"],
             "streak": p["streak"],
+            "longest_streak": p.get("longest_streak", p.get("streak", 0)),
             "last_workout_date": p["last_workout_date"],
             "achievements": p["achievements"],
             "pending_adjustments": p.get("pending_adjustments", {"squat": 0.0, "bench": 0.0, "deadlift": 0.0}),
+            "perfect_workouts": p.get("perfect_workouts", 0),
+            "perfect_weeks": p.get("perfect_weeks", 0),
+            "weeks_completed": p.get("weeks_completed", []),
+            "max_session_volume_kg": p.get("max_session_volume_kg", 0.0),
+            "max_weekly_volume_kg": p.get("max_weekly_volume_kg", 0.0),
+            "weekly_volume_log": p.get("weekly_volume_log", {}),
+            "rpe_logged_once": p.get("rpe_logged_once", False),
+            "night_sessions": p.get("night_sessions", 0),
+            "early_sessions": p.get("early_sessions", 0),
+            "comeback_count": p.get("comeback_count", 0),
+            "workout_dates": p.get("workout_dates", []),
+            "hybrid_run_sessions": p.get("hybrid_run_sessions", 0),
+            "hybrid_bike_sessions": p.get("hybrid_bike_sessions", 0),
+            "no_days_off_max": p.get("no_days_off_max", 0),
         }}
     )
 
@@ -580,7 +909,15 @@ async def get_achievements(profile_id: str):
         raise HTTPException(404, "Profile not found")
     unlocked = set(p.get("achievements", []))
     return [
-        {"key": k, "name": v["name"], "desc": v["desc"], "unlocked": k in unlocked}
+        {
+            "key": k,
+            "name": v["name"],
+            "desc": v["desc"],
+            "category": v.get("category", "Special"),
+            "tier": v.get("tier", "basic"),
+            "xp": TIER_XP.get(v.get("tier", "basic"), 50),
+            "unlocked": k in unlocked,
+        }
         for k, v in ACHIEVEMENTS.items()
     ]
 
@@ -623,6 +960,124 @@ async def get_progress(profile_id: str):
         "completed_count": len(completed),
         "total_count": len(workouts),
     }
+
+@api_router.post("/profile/{profile_id}/cardio")
+async def log_cardio(profile_id: str, data: CardioInput):
+    p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Profile not found")
+    activity = data.activity.lower()
+    if activity not in ("run", "bike", "sprint"):
+        raise HTTPException(400, "activity must be run, bike, or sprint")
+
+    now = datetime.now(timezone.utc)
+    today = now.date().isoformat()
+    hr = now.hour
+    xp_gained = 50  # base cardio reward
+
+    if activity == "run":
+        if not data.distance_km or not data.duration_sec:
+            raise HTTPException(400, "run requires distance_km and duration_sec")
+        p["total_run_km"] = round(p.get("total_run_km", 0.0) + data.distance_km, 2)
+        if data.distance_km > p.get("longest_run_km", 0):
+            p["longest_run_km"] = data.distance_km
+        pace = data.duration_sec / max(data.distance_km, 0.001)
+        best = p.get("best_run_pace_sec_per_km")
+        if best is None or pace < best:
+            p["best_run_pace_sec_per_km"] = pace
+        p["_last_cardio_activity"] = "run"
+        xp_gained += int(min(150, data.distance_km * 15))
+    elif activity == "bike":
+        if not data.distance_km:
+            raise HTTPException(400, "bike requires distance_km")
+        p["total_bike_km"] = round(p.get("total_bike_km", 0.0) + data.distance_km, 2)
+        if data.distance_km > p.get("longest_bike_km", 0):
+            p["longest_bike_km"] = data.distance_km
+        p["_last_cardio_activity"] = "bike"
+        xp_gained += int(min(150, data.distance_km * 5))
+    elif activity == "sprint":
+        if not data.sprint_distance_m or not data.sprint_time_sec:
+            raise HTTPException(400, "sprint requires sprint_distance_m and sprint_time_sec")
+        key = f"best_sprint_{data.sprint_distance_m}m"
+        prev = p.get(key)
+        if prev is None or data.sprint_time_sec < prev:
+            p[key] = data.sprint_time_sec
+        p["_last_cardio_activity"] = "sprint"
+        xp_gained += 75
+
+    # Time-of-day tracking
+    if hr >= 21 or hr < 2:
+        p["night_sessions"] = p.get("night_sessions", 0) + 1
+    if 3 <= hr < 6:
+        p["early_sessions"] = p.get("early_sessions", 0) + 1
+
+    # Cardio date + hybrid check
+    cardio_dates = set(p.get("cardio_dates", []))
+    cardio_dates.add(today)
+    p["cardio_dates"] = list(cardio_dates)
+    workout_dates = set(p.get("workout_dates", []))
+    if today in workout_dates:
+        if activity == "run":
+            p["hybrid_run_sessions"] = p.get("hybrid_run_sessions", 0) + 1
+        elif activity == "bike":
+            p["hybrid_bike_sessions"] = p.get("hybrid_bike_sessions", 0) + 1
+
+    # No-days-off recompute
+    all_dates = sorted(workout_dates | cardio_dates)
+    ndo = 1
+    max_ndo = 1
+    for i in range(1, len(all_dates)):
+        d1 = datetime.fromisoformat(all_dates[i-1]).date()
+        d2 = datetime.fromisoformat(all_dates[i]).date()
+        if (d2 - d1).days == 1:
+            ndo += 1
+            max_ndo = max(max_ndo, ndo)
+        else:
+            ndo = 1
+    p["no_days_off_max"] = max(p.get("no_days_off_max", 0), max_ndo)
+
+    apply_xp(p, xp_gained)
+    completed_count = sum(1 for w in p.get("workouts", []) if w.get("completed"))
+    new_ach = check_achievements(p, completed_count)
+    ach_xp = p.get("achievement_xp_last", 0)
+
+    await db.profiles.update_one(
+        {"id": profile_id},
+        {"$set": {
+            "xp": p["xp"],
+            "level": p["level"],
+            "total_run_km": p.get("total_run_km", 0.0),
+            "longest_run_km": p.get("longest_run_km", 0.0),
+            "best_run_pace_sec_per_km": p.get("best_run_pace_sec_per_km"),
+            "total_bike_km": p.get("total_bike_km", 0.0),
+            "longest_bike_km": p.get("longest_bike_km", 0.0),
+            "best_sprint_100m": p.get("best_sprint_100m"),
+            "best_sprint_200m": p.get("best_sprint_200m"),
+            "best_sprint_400m": p.get("best_sprint_400m"),
+            "cardio_dates": p["cardio_dates"],
+            "hybrid_run_sessions": p.get("hybrid_run_sessions", 0),
+            "hybrid_bike_sessions": p.get("hybrid_bike_sessions", 0),
+            "no_days_off_max": p.get("no_days_off_max", 0),
+            "night_sessions": p.get("night_sessions", 0),
+            "early_sessions": p.get("early_sessions", 0),
+            "achievements": p["achievements"],
+        }}
+    )
+    return {
+        "xp_gained": xp_gained,
+        "achievement_xp": ach_xp,
+        "total_xp": p["xp"],
+        "level": p["level"],
+        "new_achievements": [{"key": k, **ACHIEVEMENTS[k], "xp": TIER_XP.get(ACHIEVEMENTS[k].get('tier','basic'),50)} for k in new_ach],
+        "stats": {
+            "total_run_km": p.get("total_run_km", 0.0),
+            "total_bike_km": p.get("total_bike_km", 0.0),
+            "longest_run_km": p.get("longest_run_km", 0.0),
+            "longest_bike_km": p.get("longest_bike_km", 0.0),
+            "best_run_pace_sec_per_km": p.get("best_run_pace_sec_per_km"),
+        },
+    }
+
 
 @api_router.post("/profile/{profile_id}/ai-coach")
 async def ai_coach(profile_id: str, data: AICoachInput):

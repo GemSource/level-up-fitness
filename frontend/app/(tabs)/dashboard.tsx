@@ -158,14 +158,24 @@ export default function Dashboard() {
         )}
 
         <View style={{ height: 16 }} />
-        <TouchableOpacity
-          testID="btn-boss-fight"
-          style={[styles.bigBtn, styles.bossBtn]}
-          onPress={() => router.push('/boss-fight')}
-        >
-          <Ionicons name="skull-outline" size={20} color={Colors.danger} />
-          <Text style={styles.bossText}>BOSS FIGHT // MAX TEST</Text>
-        </TouchableOpacity>
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            testID="btn-cardio"
+            style={[styles.bigBtn, styles.cardioBtn]}
+            onPress={() => router.push('/cardio')}
+          >
+            <Ionicons name="bicycle-outline" size={20} color={Colors.primary} />
+            <Text style={styles.cardioText}>CARDIO LOG</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            testID="btn-boss-fight"
+            style={[styles.bigBtn, styles.bossBtn]}
+            onPress={() => router.push('/boss-fight')}
+          >
+            <Ionicons name="skull-outline" size={20} color={Colors.danger} />
+            <Text style={styles.bossText}>BOSS FIGHT</Text>
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity testID="btn-reset" onPress={reset} style={styles.resetBtn}>
           <Text style={styles.resetText}>RESET HUNTER</Text>
@@ -207,9 +217,12 @@ const styles = StyleSheet.create({
   exRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   exName: { color: Colors.textMain, fontFamily: Fonts.mono, fontSize: 13 },
   exDetail: { color: Colors.textMuted, fontFamily: Fonts.mono, fontSize: 12 },
-  bigBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, borderWidth: 1 },
-  bossBtn: { backgroundColor: 'rgba(255,0,85,0.06)', borderColor: Colors.danger, shadowColor: Colors.danger, shadowOpacity: 0.5, shadowRadius: 10 },
-  bossText: { color: Colors.danger, fontFamily: Fonts.heading, fontSize: 14, letterSpacing: 3 },
+  bigBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16, borderWidth: 1 },
+  actionRow: { flexDirection: 'row', gap: 10 },
+  cardioBtn: { flex: 1, backgroundColor: 'rgba(0,255,255,0.06)', borderColor: Colors.primary, shadowColor: Colors.primary, shadowOpacity: 0.4, shadowRadius: 8 },
+  cardioText: { color: Colors.primary, fontFamily: Fonts.heading, fontSize: 13, letterSpacing: 3 },
+  bossBtn: { flex: 1, backgroundColor: 'rgba(255,0,85,0.06)', borderColor: Colors.danger, shadowColor: Colors.danger, shadowOpacity: 0.5, shadowRadius: 10 },
+  bossText: { color: Colors.danger, fontFamily: Fonts.heading, fontSize: 13, letterSpacing: 3 },
   resetBtn: { marginTop: 24, alignItems: 'center', padding: 10 },
   resetText: { color: Colors.textDim, fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 2 },
   modeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },

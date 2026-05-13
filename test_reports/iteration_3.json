@@ -1,0 +1,53 @@
+{
+  "summary": "Backend-only v3 retest: 84-achievement expansion + new /cardio endpoint. Added /app/backend/tests/test_hunter_v3.py (18 tests) covering achievement catalog shape, strength/cardio auto-unlocks, pace/sprint/bike thresholds, session volume, comeback, and 404/400 validation. Full suite: 34/34 PASS (16 regression + 18 v3) against public preview URL.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/profile/{id}/workout/log", "issue": "Weekly-bonus XP (+300 / +200 deload) is added to xp_gained AFTER apply_xp() is called, so the response field xp_gained reflects it but the persisted profile.xp/level does not. Same defect carried from iteration_2 — still not fixed."},
+      {"endpoint": "POST /api/profile/{id}/cardio", "issue": "hybrid_run/bike_sessions is incremented in the cardio path only when today already has a workout_date; the workout/log path uses p['_last_cardio_activity'] which is only set during cardio call — works for cardio-after-lift but is fragile/ad-hoc. Recommend tracking per-day cardio activity types explicitly."},
+      {"endpoint": "POST /api/profile/{id}/cardio", "issue": "Each new cardio session re-adds the same date to cardio_dates as a set, so historical occurrences are not preserved (only unique dates). For 'total km' this is fine, but it precludes per-session retrieval."},
+      {"endpoint": "POST /api/profile (Profile model)", "issue": "Pydantic model uses mutable default values ({}, []) — works because Pydantic copies them, but flagged for clarity. Field(default_factory=...) is preferred."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_hunter_v3.py",
+    "/app/backend/tests/test_hunter_api.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/v3_results.xml"
+  ],
+  "action_items": [
+    "(carry-over) Move apply_xp() call AFTER weekly-bonus XP is added so persisted profile XP/level matches the response.",
+    "Optional: refactor hybrid same-day detection in workout/log to use per-day activity records instead of the ad-hoc p['_last_cardio_activity'] field.",
+    "server.py is now 1154 lines — split into routers/services modules (already flagged in iteration_2).",
+    "Consider returning 201 Created on POST /api/profile (cosmetic)."
+  ],
+  "critical_code_review_comments": [
+    "ACHIEVEMENTS dict has exactly 84 keys across 18 categories — matches spec.",
+    "TIER_XP mapping {basic:50, medium:100, major:250, elite:500} applied via apply_xp() inside check_achievements() — confirmed XP is granted for each newly unlocked achievement (test_xp_awarded_for_unlocks_on_create + test_cardio_unlock_grants_tier_xp).",
+    "Pace thresholds use strict '<' (not '<='), so 300 sec/km exactly does NOT unlock pace_sub_5 — verified.",
+    "Sprint thresholds also strict '<': 20s/40s/90s for 100/200/400m.",
+    "Run, bike, sprint single-session AND running total accumulation all correctly handled in /cardio.",
+    "Best run pace and best sprint per distance only update on improvement (lower seconds).",
+    "Workout log session_volume_kg = sum(logged_weight * logged_reps * target_sets) for done exercises — confirmed: 200kg × 10reps × 10sets total = 20000kg, unlocks volume_session_10k.",
+    "Comeback unlocks when last_workout_date is 5+ days ago at the time of next completed workout — confirmed via backdated DB record.",
+    "Rank achievement only adds CURRENT rank tier (rank_e/d/c/b/a/s) — lower ranks NOT auto-cumulated when ranking up. Could be a UX miss (a hunter who jumps from E→C never gets rank_d). Flagging only.",
+    "/api/profile/{id}/cardio properly returns 400 on missing distance_km/duration_sec/sprint args and 404 on invalid profile.",
+    "MongoDB ObjectId _id is excluded from all responses; UUIDs used for ids.",
+    "EMERGENT_LLM_KEY present; AI coach (claude-sonnet-4-5-20250929) returns real responses (test_ai_coach_with_new_log_schema)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_hunter_v3.py (new)"
+  ],
+  "success_rate": {"backend": "100% (34/34)", "frontend": "N/A (not requested)"},
+  "seed_data_creation": "All test profiles prefixed TEST_v3_*; cleaned up via mongosh deleteMany at end of suite.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Public URL = $EXPO_PUBLIC_BACKEND_URL (https://powerlevel-fit.preview.emergentagent.com). 84 achievements across 18 categories. Tier XP: basic=50, medium=100, major=250, elite=500 awarded via apply_xp inside check_achievements. New endpoint POST /api/profile/{id}/cardio takes {activity:'run'|'bike'|'sprint', distance_km, duration_sec, sprint_distance_m, sprint_time_sec, notes}. Run/pace strictly '<' threshold (300 sec/km does NOT unlock pace_sub_5). Sprint best times stored per distance (100m/200m/400m), only updated on improvement. Workout log session_volume_kg = logged_weight * logged_reps * target_sets summed across done exercises; >=10000 unlocks volume_session_10k. Comeback unlocks when (now - last_workout_date).days >= 5 at next workout_complete. Rank achievement only adds current rank, never backfills lower ones (noted as potential UX gap). Weekly bonus XP still has the persistence bug from iteration_2 (apply_xp called before weekly +300/+200 added).",
+  "rca_of_issue": "No bugs. All 16 v3 review-request items verified, plus regression of all 16 prior tests. Pre-existing minor concern (weekly-bonus XP persistence) carries over and is noted again under action_items."
+}
