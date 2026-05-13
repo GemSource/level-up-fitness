@@ -1,0 +1,47 @@
+{
+  "summary": "Backend-only retest after Hunter Strength System refactor (new per-exercise WorkoutLogInput schema, RPE-driven progression, per-day intensity modifier, machine 5kg rounding, {min,max} ETA). Rewrote /app/backend/tests/test_hunter_api.py to the new schema; 16/16 pytest cases PASS (100%) against the public preview URL. All 12 features from the review request are verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/profile", "issue": "Returns HTTP 200 on create — idiomatic 201 Created (cosmetic)."},
+      {"endpoint": "POST /api/profile/{id}/workout/log", "issue": "When a workout becomes 'complete' via the weekly bonus path, the +300 (and +200 deload) XP is computed AFTER apply_xp(), so it's reflected in body['xp_gained'] but NOT applied to the persisted profile xp/level. Could lead to weekly-bonus XP being lost in the response vs. DB. Recommend moving apply_xp() call to after weekly bonus calculation."},
+      {"endpoint": "POST /api/profile/{id}/workout/log", "issue": "RPE adjustment cascades to ALL remaining uncompleted workouts of that day_type for the rest of the block. Spec says 'next session' — current behavior compounds across cycles. If multiple sub-target RPEs land in a row, weights drift quickly. Confirm intent: should it apply only to the very next uncompleted workout?"},
+      {"endpoint": "GET /api/profile/{id}/progress", "issue": "history filter uses string-contains on exercise name; 'Pause Squat' would match 'Back Squat'? Actually it only includes names containing 'Back Squat', 'Bench Press', or 'Deadlift' (and excludes 'Romanian'). 'Pause Squat' is excluded as expected — OK, but fragile. Recommend using is_main flag on logs."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_hunter_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Consider moving the weekly-bonus xp_gained addition above apply_xp() so the persisted profile XP/level matches the response value.",
+    "Clarify whether RPE-driven kg adjustment should propagate to ALL future uncompleted same-day-type workouts (current) or only the immediately-next one (spec wording ambiguous: 'next session of same main lift')."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 699 lines — at the 700-line guideline ceiling. Recommend splitting into routes/, services/, models/ before adding more features.",
+    "Per-day intensity modifier and goal-ratio decoupling are correctly implemented: daily weights use only week_pct + day_mod (no goal_ratio scaling).",
+    "progression_mode_from_ratio buckets match spec exactly (<1.25, 1.25–1.75 inclusive, >1.75).",
+    "estimate_weeks_to_goal returns dict with int min/max as required.",
+    "RPE-driven adjustment loop correctly iterates remaining uncompleted workouts of same day_type and applies round_to_2_5.",
+    "Boss fight correctly resets pending_adjustments to zeros and regenerates the block with goal_ratio recomputed.",
+    "Machine rounding (round_to_5) verified for Lat Pulldown and Leg Press.",
+    "MongoDB _id is correctly excluded from all GET responses; UUID-based ids used.",
+    "load_dotenv is at module top before env access — timing is correct.",
+    "emergentintegrations LlmChat with anthropic/claude-sonnet-4-5-20250929 works live; AI coach returns real responses (no SYSTEM OFFLINE fallback hit during tests)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_hunter_api.py (rewritten for new per-exercise schema)"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "N/A (not requested)"},
+  "seed_data_creation": "Tests create TEST_-prefixed profiles; final test_cleanup_test_profiles runs mongosh deleteMany({name:/^TEST_/}) to clean up.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env. New WorkoutLogInput schema = {workout_id, exercises:[{name,target_sets,target_reps,target_weight,target_rpe,logged_weight,logged_reps,logged_rpe,is_main,done}], notes}. Key XP math: 20*done_count + 50 per main-done + 100 if all done + 50 if all done have logged_rpe. Verified: full SQUAT_DAY (3 exercises, all done with RPE) = 260 XP. Partial (1 of 3 done with RPE) = 70 XP. Week-1 SQUAT_DAY squat weight at squat_max=200 is 140kg (BASE 0.70). Week-1 BENCH_DAY bench at bench_max=140 is 102.5kg (HIGH 0.725). UPPER_ACC/LOWER_ACC are LOW tag, weights for Lat Pulldown/Leg Press snap to 5kg. RPE-driven: <target→+2.5, ==target→0, >target→-2.5 applied to ALL remaining same-day_type uncompleted workouts. Boss fight resets pending_adjustments to {0,0,0} and recomputes progression_mode (1000/650 ratio → moderate).",
+  "rca_of_issue": "No bugs. All 12 requested features verified via parametrized + flow tests. Minor concern on weekly-bonus XP persistence reported under backend_issues.minor (see action_items)."
+}

@@ -46,29 +46,31 @@ class Profile(BaseModel):
     xp: int = 0
     level: int = 1
     streak: int = 0
+    progression_mode: str = "moderate"
+    goal_ratio: float = 1.5
+    estimated_weeks_to_goal: Dict[str, int] = {"min": 0, "max": 0}
     last_workout_date: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     block_start_date: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     boss_fight_count: int = 0
     achievements: List[str] = []
+    pending_adjustments: Dict[str, float] = {"squat": 0.0, "bench": 0.0, "deadlift": 0.0}
 
-class SetLog(BaseModel):
-    weight: float
-    reps: int
-    rpe: Optional[float] = None
-    completed: bool = True
-
-class ExerciseLog(BaseModel):
+class ExerciseLogRow(BaseModel):
     name: str
     target_sets: int
     target_reps: int
     target_weight: float
     target_rpe: Optional[float] = None
-    sets: List[SetLog] = []
+    logged_weight: Optional[float] = None
+    logged_reps: Optional[int] = None
+    logged_rpe: Optional[float] = None
+    is_main: bool = False
+    done: bool = False
 
 class WorkoutLogInput(BaseModel):
     workout_id: str
-    exercises: List[ExerciseLog]
+    exercises: List[ExerciseLogRow]
     notes: Optional[str] = None
 
 class BossFightInput(BaseModel):
@@ -115,11 +117,47 @@ def apply_xp(profile: dict, amount: int) -> dict:
 def round_to_2_5(w: float) -> float:
     return round(w / 2.5) * 2.5
 
-def generate_block(squat: float, bench: float, deadlift: float, training_days: int) -> List[dict]:
+def round_to_5(w: float) -> float:
+    return round(w / 5) * 5
+
+def progression_mode_from_ratio(goal_ratio: float) -> str:
+    if goal_ratio < 1.25:
+        return "conservative"
+    if goal_ratio <= 1.75:
+        return "moderate"
+    return "aggressive"
+
+def estimate_weeks_to_goal(current_total: float, goal_total: float, mode: str) -> Dict[str, int]:
+    """RPE-driven progression is non-linear. Provide a realistic weekly-gain range
+    for display purposes only — NOT used to compute daily training weights."""
+    if current_total >= goal_total:
+        return {"min": 0, "max": 0}
+    gap = goal_total - current_total
+    rng = {"conservative": (1.0, 2.5), "moderate": (2.5, 5.0), "aggressive": (5.0, 7.5)}[mode]
+    # min weeks = gap / max gain, max weeks = gap / min gain
+    return {"min": int(gap / rng[1]), "max": int(gap / rng[0])}
+
+# Per-day intensity modifier inside a week (Low/Base/High). NOT goal-based.
+DAY_INTENSITY = {
+    "SQUAT_DAY": 0.0,        # BASE
+    "BENCH_DAY": 0.025,      # HIGH
+    "DEADLIFT_DAY": 0.0,     # BASE
+    "UPPER_ACC": -0.025,     # LOW
+    "LOWER_ACC": -0.025,     # LOW
+    "CONDITIONING": -0.025,  # LOW
+}
+DAY_TAG = {
+    "SQUAT_DAY": "BASE", "BENCH_DAY": "HIGH", "DEADLIFT_DAY": "BASE",
+    "UPPER_ACC": "LOW", "LOWER_ACC": "LOW", "CONDITIONING": "LOW",
+}
+
+def generate_block(squat: float, bench: float, deadlift: float, training_days: int, goal_ratio: float = 1.5, adjustments: Optional[Dict[str, float]] = None) -> List[dict]:
     """Generate a 6-week powerlifting block.
-    Weeks 1-4: Build (volume), Week 5: Heavy (intensification), Week 6: Deload
-    """
-    # Week templates: (label, intensity_pct, sets, reps)
+    Weeks 1-4: Build (volume), Week 5: Heavy (intensification), Week 6: Deload.
+    Daily weights = current_1RM * week_pct * (1 + day_intensity_modifier).
+    Optional `adjustments` dict applies RPE-driven kg adjustments per main lift (squat/bench/deadlift)."""
+    adj = adjustments or {"squat": 0.0, "bench": 0.0, "deadlift": 0.0}
+    # Base week templates — NO goal-based shift on daily weights
     week_specs = {
         1: ("BUILD", 0.70, 4, 6),
         2: ("BUILD", 0.725, 4, 6),
@@ -143,22 +181,28 @@ def generate_block(squat: float, bench: float, deadlift: float, training_days: i
         label, pct, sets, reps = week_specs[week]
         target_rpe = {1: 6.5, 2: 7, 3: 7.5, 4: 8, 5: 9, 6: 6}[week]
         for day_idx, day_type in enumerate(days):
+            day_mod = DAY_INTENSITY.get(day_type, 0.0)
+            day_pct = pct + day_mod  # apply Low/Base/High intensity modifier
+            day_tag = DAY_TAG.get(day_type, "BASE")
+            sq_w = round_to_2_5(squat * day_pct + adj.get("squat", 0.0))
+            bn_w = round_to_2_5(bench * day_pct + adj.get("bench", 0.0))
+            dl_w = round_to_2_5(deadlift * day_pct + adj.get("deadlift", 0.0))
             exercises = []
             if day_type == "SQUAT_DAY":
                 exercises = [
-                    {"name": "Back Squat", "sets": sets, "reps": reps, "weight": round_to_2_5(squat * pct), "target_rpe": target_rpe, "is_main": True},
+                    {"name": "Back Squat", "sets": sets, "reps": reps, "weight": sq_w, "target_rpe": target_rpe, "is_main": True},
                     {"name": "Romanian Deadlift", "sets": 3, "reps": 8, "weight": round_to_2_5(deadlift * 0.55), "target_rpe": 7, "is_main": False},
                     {"name": "Walking Lunges", "sets": 3, "reps": 10, "weight": round_to_2_5(squat * 0.25), "target_rpe": 7, "is_main": False},
                 ]
             elif day_type == "BENCH_DAY":
                 exercises = [
-                    {"name": "Bench Press", "sets": sets, "reps": reps, "weight": round_to_2_5(bench * pct), "target_rpe": target_rpe, "is_main": True},
+                    {"name": "Bench Press", "sets": sets, "reps": reps, "weight": bn_w, "target_rpe": target_rpe, "is_main": True},
                     {"name": "Overhead Press", "sets": 3, "reps": 8, "weight": round_to_2_5(bench * 0.6), "target_rpe": 7, "is_main": False},
                     {"name": "Barbell Row", "sets": 4, "reps": 8, "weight": round_to_2_5(bench * 0.8), "target_rpe": 7, "is_main": False},
                 ]
             elif day_type == "DEADLIFT_DAY":
                 exercises = [
-                    {"name": "Deadlift", "sets": sets, "reps": reps, "weight": round_to_2_5(deadlift * pct), "target_rpe": target_rpe, "is_main": True},
+                    {"name": "Deadlift", "sets": sets, "reps": reps, "weight": dl_w, "target_rpe": target_rpe, "is_main": True},
                     {"name": "Front Squat", "sets": 3, "reps": 6, "weight": round_to_2_5(squat * 0.6), "target_rpe": 7, "is_main": False},
                     {"name": "Pull-ups", "sets": 4, "reps": 8, "weight": 0, "target_rpe": 8, "is_main": False},
                 ]
@@ -166,12 +210,12 @@ def generate_block(squat: float, bench: float, deadlift: float, training_days: i
                 exercises = [
                     {"name": "Close-Grip Bench", "sets": 4, "reps": 6, "weight": round_to_2_5(bench * 0.75), "target_rpe": 7, "is_main": False},
                     {"name": "Incline DB Press", "sets": 3, "reps": 10, "weight": round_to_2_5(bench * 0.3), "target_rpe": 7, "is_main": False},
-                    {"name": "Lat Pulldown", "sets": 4, "reps": 12, "weight": round_to_2_5(bench * 0.5), "target_rpe": 7, "is_main": False},
+                    {"name": "Lat Pulldown", "sets": 4, "reps": 12, "weight": round_to_5(bench * 0.5), "target_rpe": 7, "is_main": False},
                 ]
             elif day_type == "LOWER_ACC":
                 exercises = [
                     {"name": "Pause Squat", "sets": 4, "reps": 5, "weight": round_to_2_5(squat * 0.7), "target_rpe": 7, "is_main": False},
-                    {"name": "Leg Press", "sets": 3, "reps": 12, "weight": round_to_2_5(squat * 1.0), "target_rpe": 7, "is_main": False},
+                    {"name": "Leg Press", "sets": 3, "reps": 12, "weight": round_to_5(squat * 1.0), "target_rpe": 7, "is_main": False},
                     {"name": "Hamstring Curl", "sets": 3, "reps": 12, "weight": 0, "target_rpe": 7, "is_main": False},
                 ]
             elif day_type == "CONDITIONING":
@@ -186,6 +230,7 @@ def generate_block(squat: float, bench: float, deadlift: float, training_days: i
                 "week_label": label,
                 "day_index": day_idx,
                 "day_type": day_type,
+                "day_tag": day_tag,  # LOW / BASE / HIGH intensity day
                 "exercises": exercises,
                 "completed": False,
                 "completed_at": None,
@@ -242,6 +287,9 @@ async def root():
 async def create_profile(data: OnboardingInput):
     total = data.squat_max + data.bench_max + data.deadlift_max
     rank = compute_rank(total)
+    goal_ratio = data.goal_total / max(total, 1)
+    mode = progression_mode_from_ratio(goal_ratio)
+    eta = estimate_weeks_to_goal(total, data.goal_total, mode)
     profile = Profile(
         name=data.name,
         bodyweight=data.bodyweight,
@@ -253,10 +301,13 @@ async def create_profile(data: OnboardingInput):
         goal_total=data.goal_total,
         total=total,
         rank=rank,
+        progression_mode=mode,
+        goal_ratio=round(goal_ratio, 3),
+        estimated_weeks_to_goal=eta,
     )
     pdoc = profile.model_dump()
-    # generate first block
-    workouts = generate_block(data.squat_max, data.bench_max, data.deadlift_max, data.training_days)
+    # generate first block (scaled by goal ratio)
+    workouts = generate_block(data.squat_max, data.bench_max, data.deadlift_max, data.training_days, goal_ratio)
     pdoc["workouts"] = workouts
     check_achievements(pdoc, 0)
     await db.profiles.insert_one(pdoc)
@@ -322,64 +373,98 @@ async def log_workout(profile_id: str, data: WorkoutLogInput):
     if target_w.get("completed"):
         raise HTTPException(400, "Workout already completed")
 
-    # Compute XP
-    xp_gained = 100  # base workout
-    has_squat = any("Squat" in ex.name for ex in data.exercises)
-    has_bench = any("Bench" in ex.name and "Press" in ex.name for ex in data.exercises)
-    has_deadlift = any("Deadlift" in ex.name for ex in data.exercises)
-    if target_w["day_type"] == "SQUAT_DAY" and has_squat:
-        xp_gained += 150
-    # bonus: hit all sets/reps target
-    all_hit = True
-    rpe_logged = False
-    for ex in data.exercises:
-        hit_count = sum(1 for s in ex.sets if s.completed and s.reps >= ex.target_reps)
-        if hit_count < ex.target_sets:
-            all_hit = False
-        if any(s.rpe is not None for s in ex.sets):
-            rpe_logged = True
-    if all_hit:
-        xp_gained += 50
-    if rpe_logged:
-        xp_gained += 25
+    # ---- New XP rules (per-exercise model) ----
+    # +20 per exercise done, +50 main lift done, +100 all done bonus, +50 all RPE logged
+    xp_gained = 0
+    total_ex = len(data.exercises)
+    done_ex = [ex for ex in data.exercises if ex.done]
+    xp_gained += 20 * len(done_ex)
+    for ex in done_ex:
+        if ex.is_main:
+            xp_gained += 50
+    if total_ex > 0 and len(done_ex) == total_ex:
+        xp_gained += 100  # all done bonus
+    if all((ex.logged_rpe is not None) for ex in done_ex) and done_ex:
+        xp_gained += 50  # all RPE logged
 
-    # Update workout
-    target_w["completed"] = True
-    target_w["completed_at"] = datetime.now(timezone.utc).isoformat()
+    # Mark workout complete only if every required exercise is done
+    workout_complete = (total_ex > 0 and len(done_ex) == total_ex)
+
     target_w["logs"] = [ex.model_dump() for ex in data.exercises]
     target_w["notes"] = data.notes
+    target_w["completed"] = workout_complete
+    if workout_complete:
+        target_w["completed_at"] = datetime.now(timezone.utc).isoformat()
     target_w["xp_gained"] = xp_gained
 
-    # Update streak
-    today = datetime.now(timezone.utc).date().isoformat()
-    last = p.get("last_workout_date")
-    if last:
-        last_date = datetime.fromisoformat(last).date() if "T" not in last else datetime.fromisoformat(last).date()
-        diff = (datetime.now(timezone.utc).date() - last_date).days
-        if diff == 0:
-            pass
-        elif diff == 1 or diff == 2:
-            p["streak"] = p.get("streak", 0) + 1
+    # Streak only advances on a completed quest
+    if workout_complete:
+        today = datetime.now(timezone.utc).date().isoformat()
+        last = p.get("last_workout_date")
+        if last:
+            last_date = datetime.fromisoformat(last).date()
+            diff = (datetime.now(timezone.utc).date() - last_date).days
+            if diff == 0:
+                pass
+            elif diff == 1:
+                p["streak"] = p.get("streak", 0) + 1
+            else:
+                p["streak"] = 1
         else:
             p["streak"] = 1
-    else:
-        p["streak"] = 1
-    p["last_workout_date"] = today
+        p["last_workout_date"] = today
 
-    # weekly bonus: if all of this week's workouts now complete
-    week_no = target_w["week"]
-    week_workouts = [w for w in workouts if w["week"] == week_no]
-    if all(w.get("completed") for w in week_workouts):
-        xp_gained += 300
-        if week_no == 6:
-            xp_gained += 200  # deload
+    # Weekly bonus
+    if workout_complete:
+        week_no = target_w["week"]
+        week_workouts = [w for w in workouts if w["week"] == week_no]
+        if all(w.get("completed") for w in week_workouts):
+            xp_gained += 300
+            if week_no == 6:
+                xp_gained += 200  # deload
 
     apply_xp(p, xp_gained)
+
+    # ---- RPE-driven progression for the main lift ----
+    main_logs = [ex for ex in data.exercises if ex.is_main and ex.done]
+    suggestion_text = ""
+    rpe_adjustment = 0.0
+    main_lift_key = None
+    if main_logs:
+        main = main_logs[0]
+        if "Squat" in main.name:
+            main_lift_key = "squat"
+        elif "Bench" in main.name and "Press" in main.name:
+            main_lift_key = "bench"
+        elif "Deadlift" in main.name and "Romanian" not in main.name:
+            main_lift_key = "deadlift"
+        if main_lift_key and main.logged_rpe is not None and main.target_rpe is not None:
+            if main.logged_rpe < main.target_rpe:
+                rpe_adjustment = 2.5
+                suggestion_text = f"[SYSTEM]: Power surge detected. +2.5kg to {main.name} next session."
+            elif main.logged_rpe > main.target_rpe:
+                rpe_adjustment = -2.5
+                suggestion_text = f"[SYSTEM]: Mana strain. -2.5kg to {main.name} next session. Recover."
+            else:
+                rpe_adjustment = 0.0
+                suggestion_text = f"[SYSTEM]: Optimal load on {main.name}. Hold for next session."
+            # Apply adjustment to remaining upcoming workouts of the same main-lift type
+            day_type_of_lift = {"squat": "SQUAT_DAY", "bench": "BENCH_DAY", "deadlift": "DEADLIFT_DAY"}[main_lift_key]
+            for fw in workouts:
+                if fw.get("completed") or fw.get("day_type") != day_type_of_lift:
+                    continue
+                for fex in fw.get("exercises", []):
+                    if fex.get("is_main"):
+                        fex["weight"] = round_to_2_5(fex["weight"] + rpe_adjustment)
+            # Persist adjustment trail on profile
+            pa = p.get("pending_adjustments", {"squat": 0.0, "bench": 0.0, "deadlift": 0.0})
+            pa[main_lift_key] = pa.get(main_lift_key, 0.0) + rpe_adjustment
+            p["pending_adjustments"] = pa
+    if not suggestion_text:
+        suggestion_text = build_progression_suggestion(target_w)
+
     completed_count = sum(1 for w in workouts if w.get("completed"))
     new_ach = check_achievements(p, completed_count)
-
-    # Generate AI coach next-session suggestion based on last logs
-    suggestion = build_progression_suggestion(target_w)
 
     await db.profiles.update_one(
         {"id": profile_id},
@@ -390,6 +475,7 @@ async def log_workout(profile_id: str, data: WorkoutLogInput):
             "streak": p["streak"],
             "last_workout_date": p["last_workout_date"],
             "achievements": p["achievements"],
+            "pending_adjustments": p.get("pending_adjustments", {"squat": 0.0, "bench": 0.0, "deadlift": 0.0}),
         }}
     )
 
@@ -398,28 +484,30 @@ async def log_workout(profile_id: str, data: WorkoutLogInput):
         "total_xp": p["xp"],
         "level": p["level"],
         "streak": p["streak"],
+        "workout_complete": workout_complete,
+        "exercises_done": len(done_ex),
+        "exercises_total": total_ex,
+        "main_lift_adjustment_kg": rpe_adjustment,
+        "main_lift_key": main_lift_key,
         "new_achievements": [{"key": k, **ACHIEVEMENTS[k]} for k in new_ach],
-        "suggestion": suggestion,
+        "suggestion": suggestion_text,
     }
 
 def build_progression_suggestion(workout: dict) -> str:
     logs = workout.get("logs", [])
     if not logs:
         return "Keep showing up. The System rewards consistency."
-    main = next((e for e in logs if any(s.get("completed") for s in e.get("sets", []))), logs[0])
-    sets = main.get("sets", [])
-    avg_rpe = [s["rpe"] for s in sets if s.get("rpe") is not None]
-    target_rpe = main.get("target_rpe") or 8
-    all_reps_hit = all(s.get("reps", 0) >= main.get("target_reps", 0) for s in sets if s.get("completed"))
-    if avg_rpe:
-        avg = sum(avg_rpe) / len(avg_rpe)
-        if all_reps_hit and avg <= target_rpe - 1:
-            return f"[SYSTEM]: Power surge detected. Add 2.5–5kg to {main['name']} next session."
-        elif avg >= target_rpe + 1:
-            return f"[SYSTEM]: Mana low. Hold {main['name']} weight next session. Recover."
-        else:
-            return f"[SYSTEM]: Solid execution on {main['name']}. Repeat the load next session."
-    return f"[SYSTEM]: Quest complete. Log RPE next time for sharper guidance."
+    main = next((e for e in logs if e.get("is_main") and e.get("done")), logs[0])
+    name = main.get("name", "main lift")
+    rpe = main.get("logged_rpe")
+    target = main.get("target_rpe") or 8
+    if rpe is None:
+        return f"[SYSTEM]: Quest complete. Log RPE next time for sharper guidance."
+    if rpe < target:
+        return f"[SYSTEM]: Power surge detected. +2.5kg to {name} next session."
+    elif rpe > target:
+        return f"[SYSTEM]: Mana strain. -2.5kg to {name} next session. Recover."
+    return f"[SYSTEM]: Optimal load on {name}. Hold for next session."
 
 @api_router.post("/profile/{profile_id}/boss-fight")
 async def boss_fight(profile_id: str, data: BossFightInput):
@@ -440,8 +528,17 @@ async def boss_fight(profile_id: str, data: BossFightInput):
     xp_reward = 1000
     apply_xp(p, xp_reward)
 
-    # Regenerate block with new maxes
-    new_workouts = generate_block(data.squat_max, data.bench_max, data.deadlift_max, p["training_days"])
+    # Recompute goal ratio + progression mode based on new total
+    goal_ratio = p["goal_total"] / max(new_total, 1)
+    new_mode = progression_mode_from_ratio(goal_ratio)
+    eta = estimate_weeks_to_goal(new_total, p["goal_total"], new_mode)
+    p["progression_mode"] = new_mode
+    p["goal_ratio"] = round(goal_ratio, 3)
+    p["estimated_weeks_to_goal"] = eta
+    # Reset RPE-driven adjustments since maxes are now fresh
+    p["pending_adjustments"] = {"squat": 0.0, "bench": 0.0, "deadlift": 0.0}
+    # Regenerate block with new maxes (no carry-over adjustments)
+    new_workouts = generate_block(data.squat_max, data.bench_max, data.deadlift_max, p["training_days"], goal_ratio)
     p["block_start_date"] = datetime.now(timezone.utc).isoformat()
     completed_count = sum(1 for w in p.get("workouts", []) if w.get("completed"))
     new_ach = check_achievements(p, completed_count)
@@ -460,6 +557,10 @@ async def boss_fight(profile_id: str, data: BossFightInput):
             "achievements": p["achievements"],
             "workouts": new_workouts,
             "block_start_date": p["block_start_date"],
+            "progression_mode": p["progression_mode"],
+            "goal_ratio": p["goal_ratio"],
+            "estimated_weeks_to_goal": p["estimated_weeks_to_goal"],
+            "pending_adjustments": p["pending_adjustments"],
         }}
     )
     return {
@@ -493,18 +594,16 @@ async def get_progress(profile_id: str):
     history = []
     for w in completed:
         for ex_log in w.get("logs", []):
-            if any(k in ex_log["name"] for k in ["Back Squat", "Bench Press", "Deadlift"]) and "Romanian" not in ex_log["name"]:
-                top_set = max(
-                    (s for s in ex_log.get("sets", []) if s.get("completed")),
-                    key=lambda s: s["weight"] * s["reps"],
-                    default=None,
-                )
-                if top_set:
+            if not ex_log.get("done"):
+                continue
+            name = ex_log.get("name", "")
+            if any(k in name for k in ["Back Squat", "Bench Press", "Deadlift"]) and "Romanian" not in name:
+                if ex_log.get("logged_weight") is not None and ex_log.get("logged_reps") is not None:
                     history.append({
                         "date": w.get("completed_at"),
-                        "exercise": ex_log["name"],
-                        "weight": top_set["weight"],
-                        "reps": top_set["reps"],
+                        "exercise": name,
+                        "weight": ex_log["logged_weight"],
+                        "reps": ex_log["logged_reps"],
                     })
     return {
         "current": {
@@ -515,6 +614,10 @@ async def get_progress(profile_id: str):
         },
         "goal_total": p["goal_total"],
         "rank": p["rank"],
+        "progression_mode": p.get("progression_mode", "moderate"),
+        "goal_ratio": p.get("goal_ratio", 1.5),
+        "estimated_weeks_to_goal": p.get("estimated_weeks_to_goal", {"min": 0, "max": 0}),
+        "pending_adjustments": p.get("pending_adjustments", {"squat": 0.0, "bench": 0.0, "deadlift": 0.0}),
         "next_rank": next_rank_info(p["total"]),
         "history": history,
         "completed_count": len(completed),
@@ -541,11 +644,15 @@ Level: {p.get('level',1)} | Streak: {p.get('streak',0)} sessions
     if completed:
         context += "\nRecent completed quests:\n"
         for w in completed[-3:]:
-            context += f"- Week {w['week']} ({w['week_label']}) {w['day_type']}\n"
+            context += f"- Week {w['week']} ({w['week_label']}) {w['day_type']} [{w.get('day_tag','')}]\n"
             for ex in w.get("logs", []):
-                if ex.get("sets"):
-                    s = ex["sets"][0]
-                    context += f"  • {ex['name']}: {s['weight']}kg x {s['reps']} (RPE {s.get('rpe','N/A')})\n"
+                if ex.get("done"):
+                    context += (
+                        f"  \u2022 {ex['name']}: target {ex.get('target_weight')}kg x{ex.get('target_reps')} "
+                        f"(RPE {ex.get('target_rpe','-')}); logged "
+                        f"{ex.get('logged_weight','-')}kg x {ex.get('logged_reps','-')} "
+                        f"(RPE {ex.get('logged_rpe','-')})\n"
+                    )
     if next_q:
         context += f"\nNext quest: Week {next_q['week']} ({next_q['week_label']}) — {next_q['day_type']}\n"
         for ex in next_q.get("exercises", []):

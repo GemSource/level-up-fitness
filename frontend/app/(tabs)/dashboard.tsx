@@ -87,6 +87,14 @@ export default function Dashboard() {
               <Text style={styles.nextValue}>{nr.kg_to_reach.toFixed(1)} KG → {nr.rank}</Text>
             </View>
           )}
+          <View style={styles.modeRow}>
+            <Text style={styles.modeBadge}>{(p.progression_mode || 'moderate').toUpperCase()} MODE</Text>
+            {p.estimated_weeks_to_goal && p.estimated_weeks_to_goal.max > 0 && (
+              <Text style={styles.etaText}>
+                ETA TO GOAL: {p.estimated_weeks_to_goal.min}-{p.estimated_weeks_to_goal.max} WEEKS
+              </Text>
+            )}
+          </View>
         </SystemFrame>
 
         <View style={styles.statsRow}>
@@ -199,4 +207,6 @@ const styles = StyleSheet.create({
   bossText: { color: Colors.danger, fontFamily: Fonts.heading, fontSize: 14, letterSpacing: 3 },
   resetBtn: { marginTop: 24, alignItems: 'center', padding: 10 },
   resetText: { color: Colors.textDim, fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 2 },
+});
+,
 });

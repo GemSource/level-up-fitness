@@ -40,6 +40,14 @@ export default function Progress() {
             <View style={[styles.barFill, { width: `${goalPct}%`, backgroundColor: rc, shadowColor: rc }]} />
           </View>
           <Text style={styles.goalPct}>{goalPct.toFixed(1)}% TO GOAL TOTAL</Text>
+          <View style={styles.modeStrip}>
+            <Text style={styles.modeBadge}>{(data.progression_mode || 'moderate').toUpperCase()}</Text>
+            {data.estimated_weeks_to_goal && data.estimated_weeks_to_goal.max > 0 && (
+              <Text style={styles.eta}>
+                ETA: {data.estimated_weeks_to_goal.min}–{data.estimated_weeks_to_goal.max} WEEKS
+              </Text>
+            )}
+          </View>
         </SystemFrame>
 
         <SystemFrame style={styles.card}>
@@ -86,6 +94,9 @@ const styles = StyleSheet.create({
   barBg: { height: 8, backgroundColor: '#080808', borderWidth: 1, borderColor: Colors.borderGlow, overflow: 'hidden' },
   barFill: { height: '100%', shadowOpacity: 1, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
   goalPct: { color: Colors.textMuted, fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 2, marginTop: 6 },
+  modeStrip: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
+  modeBadge: { color: Colors.primary, fontFamily: Fonts.monoBold, fontSize: 9, letterSpacing: 2, paddingHorizontal: 6, paddingVertical: 3, borderWidth: 1, borderColor: Colors.borderGlow, backgroundColor: 'rgba(0,255,255,0.06)' },
+  eta: { color: Colors.textMuted, fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 1 },
   row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
   lift: { color: Colors.textMain, fontFamily: Fonts.heading, fontSize: 14, letterSpacing: 2 },
   liftVal: { color: Colors.primary, fontFamily: Fonts.monoBold, fontSize: 14, letterSpacing: 1 },

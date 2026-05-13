@@ -11,11 +11,17 @@ import { Colors, Fonts } from '../../src/theme';
 import { SystemFrame } from '../../src/components/SystemFrame';
 import { getWorkout, logWorkout } from '../../src/api';
 
+const dayTagColor = (tag: string) => {
+  if (tag === 'HIGH') return '#FF7777';
+  if (tag === 'LOW') return '#7CFFCB';
+  return Colors.primary;
+};
+
 export default function WorkoutLog() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [workout, setWorkout] = useState<any>(null);
-  const [logs, setLogs] = useState<any[]>([]);
+  const [rows, setRows] = useState<any[]>([]);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -25,68 +31,73 @@ export default function WorkoutLog() {
       if (!pid || !id) return;
       const w = await getWorkout(pid, id);
       setWorkout(w);
-      setLogs(w.exercises.map((ex: any) => ({
+      setRows(w.exercises.map((ex: any) => ({
         name: ex.name,
         target_sets: ex.sets,
         target_reps: ex.reps,
         target_weight: ex.weight,
         target_rpe: ex.target_rpe,
-        sets: Array.from({ length: ex.sets }, () => ({
-          weight: String(ex.weight),
-          reps: String(ex.reps),
-          rpe: '',
-          completed: false,
-        })),
+        is_main: !!ex.is_main,
+        logged_weight: String(ex.weight),
+        logged_reps: String(ex.reps),
+        logged_rpe: '',
+        done: false,
       })));
     })();
   }, [id]);
 
-  const updateSet = (exIdx: number, setIdx: number, field: string, value: any) => {
-    const next = [...logs];
-    next[exIdx].sets[setIdx] = { ...next[exIdx].sets[setIdx], [field]: value };
-    setLogs(next);
+  const update = (idx: number, field: string, value: any) => {
+    setRows(prev => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: value };
+      return next;
+    });
   };
 
-  const toggleSet = (exIdx: number, setIdx: number) => {
-    const next = [...logs];
-    next[exIdx].sets[setIdx].completed = !next[exIdx].sets[setIdx].completed;
-    setLogs(next);
-  };
+  const toggleDone = (idx: number) => update(idx, 'done', !rows[idx].done);
+
+  const doneCount = rows.filter(r => r.done).length;
+  const total = rows.length;
+  const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
   const submit = async () => {
     const pid = await AsyncStorage.getItem('profile_id');
     if (!pid) return;
-    const anyCompleted = logs.some(ex => ex.sets.some((s: any) => s.completed));
-    if (!anyCompleted) {
-      return Alert.alert('[SYSTEM]', 'Mark at least one set as complete.');
+    if (doneCount === 0) {
+      return Alert.alert('[SYSTEM]', 'Mark at least one exercise as done.');
     }
     setSubmitting(true);
     try {
       const payload = {
         workout_id: id,
         notes,
-        exercises: logs.map(ex => ({
-          name: ex.name,
-          target_sets: ex.target_sets,
-          target_reps: ex.target_reps,
-          target_weight: ex.target_weight,
-          target_rpe: ex.target_rpe,
-          sets: ex.sets.map((s: any) => ({
-            weight: parseFloat(s.weight) || 0,
-            reps: parseInt(s.reps) || 0,
-            rpe: s.rpe ? parseFloat(s.rpe) : null,
-            completed: !!s.completed,
-          })),
+        exercises: rows.map(r => ({
+          name: r.name,
+          target_sets: r.target_sets,
+          target_reps: r.target_reps,
+          target_weight: r.target_weight,
+          target_rpe: r.target_rpe,
+          is_main: r.is_main,
+          done: r.done,
+          logged_weight: r.done && r.logged_weight ? parseFloat(r.logged_weight) : null,
+          logged_reps: r.done && r.logged_reps ? parseInt(r.logged_reps) : null,
+          logged_rpe: r.done && r.logged_rpe ? parseFloat(r.logged_rpe) : null,
         })),
       };
       const result = await logWorkout(pid, payload);
-      let msg = `+${result.xp_gained} XP\nLEVEL ${result.level} · ${result.streak} DAY STREAK\n\n${result.suggestion}`;
+      let msg = `+${result.xp_gained} XP\nLEVEL ${result.level} · ${result.streak} DAY STREAK\n${result.exercises_done}/${result.exercises_total} EXERCISES\n\n${result.suggestion}`;
+      if (result.main_lift_adjustment_kg !== 0 && result.main_lift_adjustment_kg != null) {
+        const sign = result.main_lift_adjustment_kg > 0 ? '+' : '';
+        msg += `\n\n[ADAPTIVE LOAD]\n${sign}${result.main_lift_adjustment_kg}kg applied to upcoming ${result.main_lift_key} sessions`;
+      }
       if (result.new_achievements?.length) {
         msg += '\n\n[ACHIEVEMENTS UNLOCKED]\n' + result.new_achievements.map((a: any) => `★ ${a.name}`).join('\n');
       }
-      Alert.alert('[QUEST COMPLETE]', msg, [
-        { text: 'CONTINUE', onPress: () => router.replace('/(tabs)/dashboard') },
-      ]);
+      Alert.alert(
+        result.workout_complete ? '[QUEST COMPLETE]' : '[QUEST PROGRESS SAVED]',
+        msg,
+        [{ text: 'CONTINUE', onPress: () => router.replace('/(tabs)/dashboard') }]
+      );
     } catch (e: any) {
       Alert.alert('[SYSTEM ERROR]', e?.response?.data?.detail || e?.message || 'Failed to log');
     } finally {
@@ -98,6 +109,9 @@ export default function WorkoutLog() {
     return <SafeAreaView style={styles.safe}><Text style={styles.system}>[LOADING QUEST...]</Text></SafeAreaView>;
   }
 
+  const dayTag = workout.day_tag || 'BASE';
+  const tagColor = dayTagColor(dayTag);
+
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -106,66 +120,91 @@ export default function WorkoutLog() {
             <Ionicons name="chevron-back" size={24} color={Colors.primary} />
           </TouchableOpacity>
           <View style={{ flex: 1, marginLeft: 8 }}>
-            <Text style={styles.system}>[QUEST :: W{workout.week} · {workout.week_label}]</Text>
+            <View style={styles.headTags}>
+              <Text style={styles.system}>[W{workout.week} · {workout.week_label}]</Text>
+              <View style={[styles.dayTagPill, { borderColor: tagColor }]}>
+                <Text style={[styles.dayTagText, { color: tagColor }]}>{dayTag} DAY</Text>
+              </View>
+            </View>
             <Text style={styles.title}>{workout.day_type.replace('_', ' ')}</Text>
           </View>
         </View>
 
+        {/* Progress bar */}
+        <View style={styles.progressWrap}>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${pct}%` }]} />
+          </View>
+          <Text style={styles.progressTxt}>
+            QUEST PROGRESS  ::  {doneCount} / {total}  ({pct}%)
+          </Text>
+        </View>
+
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          {logs.map((ex, exIdx) => (
-            <SystemFrame key={exIdx} style={styles.exCard}>
-              <View style={styles.exHead}>
-                <Text style={styles.exName}>{ex.name}</Text>
-                <Text style={styles.exTarget}>RPE {ex.target_rpe ?? '-'}</Text>
+          {rows.map((r, i) => (
+            <SystemFrame
+              key={i}
+              style={[styles.row, r.done && styles.rowDone]}
+              color={r.done ? Colors.questComplete : (r.is_main ? Colors.primary : Colors.border)}
+            >
+              <View style={styles.rowTop}>
+                <TouchableOpacity
+                  testID={`exercise-done-${i}`}
+                  onPress={() => toggleDone(i)}
+                  style={[styles.check, r.done && styles.checkOn]}
+                >
+                  {r.done && <Ionicons name="checkmark" size={20} color={Colors.questComplete} />}
+                </TouchableOpacity>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <View style={styles.nameRow}>
+                    {r.is_main && <Text style={styles.mainStar}>★ </Text>}
+                    <Text style={styles.exName}>{r.name}</Text>
+                  </View>
+                  <Text style={styles.target}>
+                    TARGET: {r.target_sets}×{r.target_reps} @ {r.target_weight}kg · RPE {r.target_rpe ?? '-'}
+                  </Text>
+                </View>
               </View>
-              <Text style={styles.exSub}>TARGET: {ex.target_sets} × {ex.target_reps} @ {ex.target_weight}kg</Text>
-              <View style={styles.setHead}>
-                <Text style={styles.setHeadTxt}>SET</Text>
-                <Text style={styles.setHeadTxt}>KG</Text>
-                <Text style={styles.setHeadTxt}>REPS</Text>
-                <Text style={styles.setHeadTxt}>RPE</Text>
-                <Text style={styles.setHeadTxt}>✓</Text>
-              </View>
-              {ex.sets.map((s: any, setIdx: number) => (
-                <View key={setIdx} style={styles.setRow}>
-                  <Text style={styles.setIdx}>{setIdx + 1}</Text>
+
+              <View style={styles.logGrid}>
+                <View style={styles.logCell}>
+                  <Text style={styles.logLabel}>WT</Text>
                   <TextInput
-                    testID={`set-weight-${exIdx}-${setIdx}`}
-                    style={styles.setInput}
+                    testID={`ex-wt-${i}`}
+                    style={styles.logInput}
                     keyboardType="decimal-pad"
-                    value={s.weight}
-                    onChangeText={(v) => updateSet(exIdx, setIdx, 'weight', v)}
+                    value={r.logged_weight}
+                    onChangeText={(v) => update(i, 'logged_weight', v)}
                   />
+                </View>
+                <View style={styles.logCell}>
+                  <Text style={styles.logLabel}>REPS</Text>
                   <TextInput
-                    testID={`set-reps-${exIdx}-${setIdx}`}
-                    style={styles.setInput}
+                    testID={`ex-reps-${i}`}
+                    style={styles.logInput}
                     keyboardType="number-pad"
-                    value={s.reps}
-                    onChangeText={(v) => updateSet(exIdx, setIdx, 'reps', v)}
+                    value={r.logged_reps}
+                    onChangeText={(v) => update(i, 'logged_reps', v)}
                   />
+                </View>
+                <View style={styles.logCell}>
+                  <Text style={styles.logLabel}>RPE</Text>
                   <TextInput
-                    testID={`set-rpe-${exIdx}-${setIdx}`}
-                    style={styles.setInput}
+                    testID={`ex-rpe-${i}`}
+                    style={styles.logInput}
                     keyboardType="decimal-pad"
                     placeholder="-"
                     placeholderTextColor={Colors.textDim}
-                    value={s.rpe}
-                    onChangeText={(v) => updateSet(exIdx, setIdx, 'rpe', v)}
+                    value={r.logged_rpe}
+                    onChangeText={(v) => update(i, 'logged_rpe', v)}
                   />
-                  <TouchableOpacity
-                    testID={`set-done-${exIdx}-${setIdx}`}
-                    onPress={() => toggleSet(exIdx, setIdx)}
-                    style={[styles.checkBox, s.completed && styles.checkBoxOn]}
-                  >
-                    {s.completed && <Ionicons name="checkmark" size={16} color={Colors.questComplete} />}
-                  </TouchableOpacity>
                 </View>
-              ))}
+              </View>
             </SystemFrame>
           ))}
 
-          <SystemFrame style={styles.exCard}>
-            <Text style={styles.label}>// QUEST NOTES</Text>
+          <SystemFrame style={styles.notesCard}>
+            <Text style={styles.notesLabel}>// QUEST NOTES</Text>
             <TextInput
               testID="input-notes"
               value={notes}
@@ -173,7 +212,7 @@ export default function WorkoutLog() {
               multiline
               placeholder="Reflections, fatigue, form notes..."
               placeholderTextColor={Colors.textDim}
-              style={styles.notes}
+              style={styles.notesInput}
             />
           </SystemFrame>
 
@@ -183,7 +222,9 @@ export default function WorkoutLog() {
             onPress={submit}
             disabled={submitting}
           >
-            <Text style={styles.submitTxt}>{submitting ? 'TRANSMITTING...' : 'COMPLETE QUEST ⚔'}</Text>
+            <Text style={styles.submitTxt}>
+              {submitting ? 'TRANSMITTING...' : doneCount === total ? 'COMPLETE QUEST ⚔' : `SAVE PROGRESS  (${doneCount}/${total})`}
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -193,35 +234,39 @@ export default function WorkoutLog() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 16, paddingBottom: 8 },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 16, paddingBottom: 4 },
+  headTags: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   system: { color: Colors.primary, fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 2 },
+  dayTagPill: { paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, backgroundColor: '#000' },
+  dayTagText: { fontFamily: Fonts.monoBold, fontSize: 9, letterSpacing: 2 },
   title: { color: Colors.textMain, fontFamily: Fonts.heading, fontSize: 20, letterSpacing: 2, marginTop: 2 },
-  scroll: { padding: 16, paddingBottom: 60 },
-  exCard: { marginBottom: 12 },
-  exHead: { flexDirection: 'row', justifyContent: 'space-between' },
-  exName: { color: Colors.textMain, fontFamily: Fonts.heading, fontSize: 16, letterSpacing: 1 },
-  exTarget: { color: Colors.primary, fontFamily: Fonts.monoBold, fontSize: 11 },
-  exSub: { color: Colors.textMuted, fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 1, marginTop: 4, marginBottom: 10 },
-  setHead: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: Colors.border, paddingBottom: 4 },
-  setHeadTxt: { color: Colors.textMuted, fontFamily: Fonts.monoBold, fontSize: 10, letterSpacing: 1, flex: 1, textAlign: 'center' },
-  setRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
-  setIdx: { color: Colors.primary, fontFamily: Fonts.monoBold, fontSize: 12, flex: 1, textAlign: 'center' },
-  setInput: {
-    flex: 1,
-    marginHorizontal: 2,
-    backgroundColor: '#000',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    color: Colors.textMain,
-    fontFamily: Fonts.mono,
-    fontSize: 12,
-    textAlign: 'center',
-    paddingVertical: 6,
+  progressWrap: { paddingHorizontal: 16, paddingBottom: 8 },
+  progressBar: { height: 8, backgroundColor: '#080808', borderWidth: 1, borderColor: Colors.borderGlow, overflow: 'hidden' },
+  progressFill: {
+    height: '100%', backgroundColor: Colors.questComplete,
+    shadowColor: Colors.questComplete, shadowOpacity: 1, shadowRadius: 8,
   },
-  checkBox: { flex: 1, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border, height: 30, marginHorizontal: 2 },
-  checkBoxOn: { borderColor: Colors.questComplete, backgroundColor: 'rgba(0,255,0,0.08)' },
-  label: { color: Colors.primary, fontFamily: Fonts.monoBold, fontSize: 11, letterSpacing: 2, marginBottom: 8 },
-  notes: { backgroundColor: '#000', borderWidth: 1, borderColor: Colors.border, color: Colors.textMain, fontFamily: Fonts.mono, fontSize: 12, padding: 10, minHeight: 60 },
-  submit: { backgroundColor: 'rgba(0,255,255,0.1)', borderWidth: 1, borderColor: Colors.primary, paddingVertical: 16, alignItems: 'center', marginTop: 8, shadowColor: Colors.primary, shadowOpacity: 0.5, shadowRadius: 12 },
-  submitTxt: { color: Colors.primary, fontFamily: Fonts.heading, fontSize: 16, letterSpacing: 3 },
+  progressTxt: { color: Colors.textMuted, fontFamily: Fonts.monoBold, fontSize: 10, letterSpacing: 2, marginTop: 6 },
+  scroll: { padding: 16, paddingBottom: 60 },
+  row: { marginBottom: 10 },
+  rowDone: { opacity: 0.85 },
+  rowTop: { flexDirection: 'row', alignItems: 'flex-start' },
+  check: { width: 36, height: 36, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
+  checkOn: { borderColor: Colors.questComplete, backgroundColor: 'rgba(0,255,0,0.08)', shadowColor: Colors.questComplete, shadowOpacity: 0.6, shadowRadius: 8 },
+  nameRow: { flexDirection: 'row', alignItems: 'center' },
+  mainStar: { color: Colors.primary, fontFamily: Fonts.monoBold, fontSize: 14 },
+  exName: { color: Colors.textMain, fontFamily: Fonts.heading, fontSize: 16, letterSpacing: 1 },
+  target: { color: Colors.textMuted, fontFamily: Fonts.mono, fontSize: 11, marginTop: 4, letterSpacing: 1 },
+  logGrid: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  logCell: { flex: 1 },
+  logLabel: { color: Colors.primary, fontFamily: Fonts.monoBold, fontSize: 9, letterSpacing: 2, marginBottom: 4 },
+  logInput: {
+    backgroundColor: '#000', borderWidth: 1, borderColor: Colors.border,
+    color: Colors.textMain, fontFamily: Fonts.mono, fontSize: 14, padding: 8, textAlign: 'center',
+  },
+  notesCard: { marginTop: 8 },
+  notesLabel: { color: Colors.primary, fontFamily: Fonts.monoBold, fontSize: 11, letterSpacing: 2, marginBottom: 8 },
+  notesInput: { backgroundColor: '#000', borderWidth: 1, borderColor: Colors.border, color: Colors.textMain, fontFamily: Fonts.mono, fontSize: 12, padding: 10, minHeight: 60 },
+  submit: { marginTop: 12, backgroundColor: 'rgba(0,255,255,0.1)', borderWidth: 1, borderColor: Colors.primary, paddingVertical: 16, alignItems: 'center', shadowColor: Colors.primary, shadowOpacity: 0.5, shadowRadius: 12 },
+  submitTxt: { color: Colors.primary, fontFamily: Fonts.heading, fontSize: 14, letterSpacing: 3 },
 });
