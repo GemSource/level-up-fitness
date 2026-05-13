@@ -177,6 +177,16 @@ export default function Dashboard() {
         )}
 
         <View style={{ height: 16 }} />
+        <TouchableOpacity
+          testID="btn-side-quests"
+          style={styles.sideQuestBtn}
+          onPress={() => router.push('/side-quests')}
+        >
+          <Ionicons name="map-outline" size={18} color={Colors.primary} />
+          <Text style={styles.sideQuestTxt}>SIDE QUESTS</Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 12 }} />
         <View style={styles.actionRow}>
           <TouchableOpacity
             testID="btn-cardio"
@@ -246,6 +256,8 @@ const styles = StyleSheet.create({
   cardioText: { color: Colors.primary, fontFamily: Fonts.heading, fontSize: 13, letterSpacing: 3 },
   bossBtn: { flex: 1, backgroundColor: 'rgba(255,0,85,0.06)', borderColor: Colors.danger, shadowColor: Colors.danger, shadowOpacity: 0.5, shadowRadius: 10 },
   bossText: { color: Colors.danger, fontFamily: Fonts.heading, fontSize: 13, letterSpacing: 3 },
+  sideQuestBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderWidth: 1, borderColor: 'rgba(0,255,255,0.4)', backgroundColor: 'rgba(0,255,255,0.04)' },
+  sideQuestTxt: { color: Colors.primary, fontFamily: Fonts.heading, fontSize: 13, letterSpacing: 3 },
   resetBtn: { marginTop: 24, alignItems: 'center', padding: 10 },
   resetText: { color: Colors.textDim, fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 2 },
   modeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },

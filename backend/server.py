@@ -82,6 +82,8 @@ class Profile(BaseModel):
     coins: int = 0
     inventory: Dict[str, int] = {}        # item_key -> quantity
     active_buffs: List[Dict[str, Any]] = []  # [{item_key, scope, applied_at, expires_at}]
+    side_quests: List[Dict[str, Any]] = []
+    custom_exercises: List[Dict[str, Any]] = []
 
 class CardioInput(BaseModel):
     activity: str  # "run" | "bike" | "sprint"
@@ -1584,6 +1586,249 @@ async def activate_item(profile_id: str, data: ActivateInput):
         {"$set": {"inventory": inv, "active_buffs": active}}
     )
     return {"active_buffs": active, "inventory": inv}
+
+
+# ---------------- v8: Exercise Library + Side Quests ----------------
+def _ex(name, category, muscle, equipment, is_main_compound=False):
+    return {"name": name, "category": category, "muscle_group": muscle, "equipment": equipment, "is_main_compound": is_main_compound}
+
+EXERCISE_LIBRARY: List[Dict[str, Any]] = [
+    # Chest
+    _ex("Bench Press", "Upper Push", "Chest", "barbell", True),
+    _ex("Incline Bench Press", "Upper Push", "Chest", "barbell"),
+    _ex("Decline Bench Press", "Upper Push", "Chest", "barbell"),
+    _ex("Dumbbell Bench Press", "Upper Push", "Chest", "dumbbell"),
+    _ex("Push-Up", "Upper Push", "Chest", "bodyweight"),
+    _ex("Chest Fly", "Upper Push", "Chest", "dumbbell"),
+    _ex("Cable Fly", "Upper Push", "Chest", "machine"),
+    _ex("Dips", "Upper Push", "Chest", "bodyweight"),
+    # Shoulders
+    _ex("Overhead Press", "Upper Push", "Shoulders", "barbell", True),
+    _ex("Arnold Press", "Upper Push", "Shoulders", "dumbbell"),
+    _ex("Lateral Raise", "Upper Push", "Shoulders", "dumbbell"),
+    _ex("Front Raise", "Upper Push", "Shoulders", "dumbbell"),
+    _ex("Rear Delt Fly", "Upper Push", "Shoulders", "dumbbell"),
+    _ex("Upright Row", "Upper Push", "Shoulders", "barbell"),
+    # Triceps
+    _ex("Tricep Pushdown", "Upper Push", "Triceps", "machine"),
+    _ex("Overhead Tricep Extension", "Upper Push", "Triceps", "dumbbell"),
+    _ex("Close-Grip Bench Press", "Upper Push", "Triceps", "barbell"),
+    _ex("Skull Crusher", "Upper Push", "Triceps", "barbell"),
+    # Back
+    _ex("Deadlift", "Upper Pull", "Back", "barbell", True),
+    _ex("Barbell Row", "Upper Pull", "Back", "barbell"),
+    _ex("Seated Cable Row", "Upper Pull", "Back", "machine"),
+    _ex("Lat Pulldown", "Upper Pull", "Back", "machine"),
+    _ex("Pull-Up", "Upper Pull", "Back", "bodyweight"),
+    _ex("Chin-Up", "Upper Pull", "Back", "bodyweight"),
+    _ex("Single-Arm Dumbbell Row", "Upper Pull", "Back", "dumbbell"),
+    _ex("T-Bar Row", "Upper Pull", "Back", "barbell"),
+    _ex("Face Pull", "Upper Pull", "Back", "machine"),
+    _ex("Shrug", "Upper Pull", "Back", "dumbbell"),
+    # Biceps
+    _ex("Barbell Curl", "Upper Pull", "Biceps", "barbell"),
+    _ex("Hammer Curl", "Upper Pull", "Biceps", "dumbbell"),
+    _ex("Preacher Curl", "Upper Pull", "Biceps", "machine"),
+    _ex("Cable Curl", "Upper Pull", "Biceps", "machine"),
+    _ex("Concentration Curl", "Upper Pull", "Biceps", "dumbbell"),
+    # Quads / Glutes
+    _ex("Back Squat", "Lower", "Quads", "barbell", True),
+    _ex("Front Squat", "Lower", "Quads", "barbell"),
+    _ex("Goblet Squat", "Lower", "Quads", "dumbbell"),
+    _ex("Leg Press", "Lower", "Quads", "machine"),
+    _ex("Walking Lunge", "Lower", "Quads", "dumbbell"),
+    _ex("Bulgarian Split Squat", "Lower", "Quads", "dumbbell"),
+    _ex("Step-Up", "Lower", "Quads", "dumbbell"),
+    _ex("Hip Thrust", "Lower", "Glutes", "barbell"),
+    _ex("Glute Bridge", "Lower", "Glutes", "bodyweight"),
+    # Hamstrings
+    _ex("Romanian Deadlift", "Lower", "Hamstrings", "barbell"),
+    _ex("Leg Curl", "Lower", "Hamstrings", "machine"),
+    _ex("Good Morning", "Lower", "Hamstrings", "barbell"),
+    # Calves
+    _ex("Standing Calf Raise", "Lower", "Calves", "machine"),
+    _ex("Seated Calf Raise", "Lower", "Calves", "machine"),
+    # Core
+    _ex("Plank", "Core", "Abs", "bodyweight"),
+    _ex("Side Plank", "Core", "Abs", "bodyweight"),
+    _ex("Crunch", "Core", "Abs", "bodyweight"),
+    _ex("Sit-Up", "Core", "Abs", "bodyweight"),
+    _ex("Russian Twist", "Core", "Abs", "bodyweight"),
+    _ex("Hanging Leg Raise", "Core", "Abs", "bodyweight"),
+    _ex("Cable Crunch", "Core", "Abs", "machine"),
+    _ex("Mountain Climber", "Core", "Abs", "bodyweight"),
+    # Cardio
+    _ex("Running", "Cardio", "Conditioning", "bodyweight"),
+    _ex("Cycling", "Cardio", "Conditioning", "machine"),
+    _ex("Rowing", "Cardio", "Conditioning", "machine"),
+    _ex("Jump Rope", "Cardio", "Conditioning", "bodyweight"),
+    _ex("Burpee", "Cardio", "Conditioning", "bodyweight"),
+    _ex("Battle Rope", "Cardio", "Conditioning", "machine"),
+    _ex("Sled Push", "Cardio", "Conditioning", "machine"),
+    _ex("Farmer's Carry", "Cardio", "Conditioning", "dumbbell"),
+    # Functional
+    _ex("Kettlebell Swing", "Functional", "Athletic", "machine"),
+    _ex("Box Jump", "Functional", "Athletic", "bodyweight"),
+    _ex("Medicine Ball Slam", "Functional", "Athletic", "machine"),
+    _ex("Clean and Press", "Functional", "Athletic", "barbell", True),
+    _ex("Snatch", "Functional", "Athletic", "barbell", True),
+    _ex("Turkish Get-Up", "Functional", "Athletic", "dumbbell"),
+]
+
+
+@api_router.get("/exercises")
+async def list_exercises(profile_id: Optional[str] = None):
+    items = list(EXERCISE_LIBRARY)
+    if profile_id:
+        p = await db.profiles.find_one({"id": profile_id}, {"_id": 0, "custom_exercises": 1})
+        if p:
+            for ce in p.get("custom_exercises", []):
+                items.append({**ce, "is_main_compound": False, "is_custom": True})
+    return items
+
+
+class CustomExerciseInput(BaseModel):
+    name: str
+    category: str
+    muscle_group: Optional[str] = None
+    equipment: str = "bodyweight"
+    notes: Optional[str] = None
+
+
+@api_router.post("/profile/{profile_id}/custom-exercise")
+async def add_custom_exercise(profile_id: str, data: CustomExerciseInput):
+    p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Profile not found")
+    custom = list(p.get("custom_exercises", []))
+    custom.append({
+        "name": data.name,
+        "category": data.category,
+        "muscle_group": data.muscle_group,
+        "equipment": data.equipment,
+        "notes": data.notes,
+    })
+    await db.profiles.update_one({"id": profile_id}, {"$set": {"custom_exercises": custom}})
+    return {"custom_exercises": custom}
+
+
+class SideQuestExerciseInput(BaseModel):
+    name: str
+    sets: int = 3
+    reps: int = 10
+    weight: float = 0.0
+    target_rpe: Optional[float] = None
+    is_main_compound: bool = False
+    notes: Optional[str] = None
+
+
+class SideQuestCreateInput(BaseModel):
+    name: str
+    exercises: List[SideQuestExerciseInput]
+    notes: Optional[str] = None
+
+
+@api_router.post("/profile/{profile_id}/side-quest")
+async def create_side_quest(profile_id: str, data: SideQuestCreateInput):
+    if len(data.exercises) < 3:
+        raise HTTPException(400, {"error": "min_exercises", "message": "Side Quest requires at least 3 exercises"})
+    p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Profile not found")
+    sq = {
+        "id": str(uuid.uuid4()),
+        "name": data.name,
+        "exercises": [ex.model_dump() for ex in data.exercises],
+        "notes": data.notes,
+        "completed": False,
+        "completed_at": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "logs": [],
+        "xp_gained": 0,
+    }
+    quests = list(p.get("side_quests", []))
+    quests.append(sq)
+    await db.profiles.update_one({"id": profile_id}, {"$set": {"side_quests": quests}})
+    return sq
+
+
+@api_router.get("/profile/{profile_id}/side-quests")
+async def list_side_quests(profile_id: str):
+    p = await db.profiles.find_one({"id": profile_id}, {"_id": 0, "side_quests": 1})
+    if not p:
+        raise HTTPException(404, "Profile not found")
+    return p.get("side_quests", [])
+
+
+class SideQuestLogExercise(BaseModel):
+    name: str
+    target_sets: int
+    target_reps: int
+    target_weight: float
+    target_rpe: Optional[float] = None
+    logged_weight: Optional[float] = None
+    logged_reps: Optional[int] = None
+    logged_rpe: Optional[float] = None
+    is_main_compound: bool = False
+    done: bool = False
+
+
+class SideQuestLogInput(BaseModel):
+    quest_id: str
+    exercises: List[SideQuestLogExercise]
+    notes: Optional[str] = None
+
+
+@api_router.post("/profile/{profile_id}/side-quest/log")
+async def log_side_quest(profile_id: str, data: SideQuestLogInput):
+    p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Profile not found")
+    quests = list(p.get("side_quests", []))
+    target = next((q for q in quests if q["id"] == data.quest_id), None)
+    if not target:
+        raise HTTPException(404, "Side Quest not found")
+    if target.get("completed"):
+        raise HTTPException(400, "Side Quest already completed")
+    if len(data.exercises) < 3:
+        raise HTTPException(400, {"error": "min_exercises", "message": "Side Quest requires at least 3 exercises"})
+
+    done_ex = [ex for ex in data.exercises if ex.done]
+    total_ex = len(data.exercises)
+
+    # Reduced XP rules
+    xp_gained = 10 * len(done_ex)
+    for ex in done_ex:
+        if ex.is_main_compound:
+            xp_gained += 10  # +20 total per main compound (10 base + 10 bonus)
+    sq_complete = (total_ex > 0 and len(done_ex) == total_ex)
+    if sq_complete:
+        xp_gained += 50
+    all_rpe = bool(done_ex) and all(ex.logged_rpe is not None for ex in done_ex)
+    if all_rpe:
+        xp_gained += 10
+
+    target["logs"] = [ex.model_dump() for ex in data.exercises]
+    target["notes"] = data.notes
+    target["xp_gained"] = xp_gained
+    target["completed"] = sq_complete
+    if sq_complete:
+        target["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+    apply_xp(p, xp_gained)
+    # No weekly bonus, no coin bonus from side quests, no boss-fight credit
+    await db.profiles.update_one(
+        {"id": profile_id},
+        {"$set": {"side_quests": quests, "xp": p["xp"], "level": p["level"]}}
+    )
+    return {
+        "xp_gained": xp_gained,
+        "total_xp": p["xp"],
+        "level": p["level"],
+        "side_quest_complete": sq_complete,
+        "exercises_done": len(done_ex),
+        "exercises_total": total_ex,
+    }
 
 
 @api_router.post("/profile/{profile_id}/ai-coach")
