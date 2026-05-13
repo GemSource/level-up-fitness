@@ -934,6 +934,21 @@ async def boss_fight(profile_id: str, data: BossFightInput):
     p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Profile not found")
+
+    # Check requirements before allowing test
+    req_eval = evaluate_boss_requirements(p)
+    if req_eval.get("locked"):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "boss_fight_locked",
+                "message": "Boss Fight Locked",
+                "next_rank": req_eval["next_rank"],
+                "missing": req_eval["missing"],
+                "requirements": req_eval["requirements"],
+            },
+        )
+
     old_rank = p["rank"]
     old_total = p["total"]
     new_total = data.squat_max + data.bench_max + data.deadlift_max
@@ -1168,6 +1183,72 @@ async def log_cardio(profile_id: str, data: CardioInput):
             "best_run_pace_sec_per_km": p.get("best_run_pace_sec_per_km"),
         },
     }
+
+
+# ---------------- Boss Fight Requirements ----------------
+# Requirements to attempt the boss fight targeting each NEXT rank.
+BOSS_REQS = {
+    "D": {"total": 450, "squat": 100, "bench": 60, "deadlift": 120, "quests": 6, "deloads": 0},
+    "C": {"total": 550, "squat": 130, "bench": 90, "deadlift": 150, "quests": 12, "deloads": 1},
+    "B": {"total": 650, "squat": 150, "bench": 110, "deadlift": 170, "quests": 20, "deloads": 1},
+    "A": {"total": 750, "squat": 180, "bench": 130, "deadlift": 200, "quests": 30, "deloads": 2},
+    "S": {"total": 850, "squat": 220, "bench": 150, "deadlift": 240, "quests": 50, "deloads": 2},
+}
+
+def evaluate_boss_requirements(p: dict) -> Dict[str, Any]:
+    """Returns requirements snapshot for the user's NEXT rank boss fight.
+    Missing items listed if any unmet."""
+    current_rank = p.get("rank", "E")
+    if current_rank == "S":
+        return {"locked": False, "next_rank": "S", "requirements": [], "missing": [], "max_rank": True}
+
+    nr = next_rank_info(p.get("total", 0))
+    target = nr["rank"]
+    reqs = BOSS_REQS.get(target)
+    if not reqs:
+        return {"locked": False, "next_rank": target, "requirements": [], "missing": []}
+
+    completed_quests = sum(1 for w in p.get("workouts", []) if w.get("completed"))
+    deloads_done = int(p.get("first_deload_done", False)) + max(0, p.get("boss_fight_count", 0))
+    # boss_fight_count is a proxy for completed cycles where deload happened
+    # Use first_deload_done flag + deloads from completed weeks_completed list including W6
+    weeks_done = p.get("weeks_completed", [])
+    deload_count = sum(1 for k in weeks_done if k.endswith(":W6")) or (1 if p.get("first_deload_done") else 0)
+
+    items = [
+        {"key": "total", "label": "Total", "have": p.get("total", 0), "need": reqs["total"], "unit": "kg"},
+        {"key": "squat", "label": "Squat", "have": p.get("squat_max", 0), "need": reqs["squat"], "unit": "kg"},
+        {"key": "bench", "label": "Bench", "have": p.get("bench_max", 0), "need": reqs["bench"], "unit": "kg"},
+        {"key": "deadlift", "label": "Deadlift", "have": p.get("deadlift_max", 0), "need": reqs["deadlift"], "unit": "kg"},
+        {"key": "quests", "label": "Quests Completed", "have": completed_quests, "need": reqs["quests"], "unit": ""},
+        {"key": "deloads", "label": "Deload Weeks", "have": deload_count, "need": reqs["deloads"], "unit": ""},
+    ]
+    missing = []
+    for it in items:
+        it["met"] = it["have"] >= it["need"]
+        if not it["met"]:
+            gap = it["need"] - it["have"]
+            if it["key"] in ("quests", "deloads"):
+                missing.append(f"Complete {int(gap)} more {it['label'].lower()}")
+            else:
+                missing.append(f"{it['label']} needs +{gap}{it['unit']}")
+    return {
+        "locked": len(missing) > 0,
+        "next_rank": target,
+        "next_threshold_kg": reqs["total"],  # min total to attempt, not rank threshold
+        "rank_threshold_kg": nr["threshold"],
+        "requirements": items,
+        "missing": missing,
+        "max_rank": False,
+    }
+
+
+@api_router.get("/profile/{profile_id}/boss-fight/requirements")
+async def boss_fight_requirements(profile_id: str):
+    p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Profile not found")
+    return evaluate_boss_requirements(p)
 
 
 @api_router.get("/profile/{profile_id}/rank-progress")
