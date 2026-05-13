@@ -66,9 +66,9 @@ export default function CreateSideQuest() {
         })),
       };
       const sq = await createSideQuest(pid, payload);
-      Alert.alert('[SIDE QUEST FORGED]', `"${sq.name}" ready to log.`, [
-        { text: 'OK', onPress: () => router.replace(`/side-quests/${sq.id}`) },
-      ]);
+      // Navigate first (web's Alert.alert ignores button onPress), then show toast/alert
+      router.replace(`/side-quests/${sq.id}`);
+      setTimeout(() => Alert.alert('[SIDE QUEST FORGED]', `"${sq.name}" ready to log.`), 100);
     } catch (e: any) {
       Alert.alert('[SYSTEM ERROR]', e?.response?.data?.detail?.message || e?.message || 'Failed');
     } finally {

@@ -80,11 +80,12 @@ export default function SideQuestLog() {
         })),
       };
       const result = await logSideQuest(pid, payload);
-      Alert.alert(
+      // Navigate first (web's Alert.alert ignores button onPress), then show toast/alert
+      router.replace('/side-quests');
+      setTimeout(() => Alert.alert(
         result.side_quest_complete ? '[SIDE QUEST CLEARED]' : '[PROGRESS SAVED]',
         `+${result.xp_gained} XP · LV ${result.level}\n${result.exercises_done}/${result.exercises_total} EXERCISES`,
-        [{ text: 'OK', onPress: () => router.replace('/side-quests') }]
-      );
+      ), 100);
     } catch (e: any) {
       Alert.alert('[SYSTEM ERROR]', e?.response?.data?.detail?.message || e?.message || 'Failed');
     } finally {
