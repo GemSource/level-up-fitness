@@ -1,0 +1,37 @@
+{
+  "summary": "v7 hotfix verified. boss-fight handler now defines boss_applied + boss_coin BEFORE return — previously failing test (TestBossFightV7::test_boss_fight_response_v7_fields) now PASSES. Added 4 new dedicated hotfix tests covering coins_gained=200/400 (rank_up path), persistence, boss_mult buff consumption (xp_reward 1000→1500 with adrenaline 1.5x), and scope isolation (workout-scoped power_boost NOT consumed by boss-fight). Full v7 suite + hotfix suite: 27/27 PASSED.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/profile/{id}/boss-fight", "issue": "`buff_used` returned to client is the catalog dict (name/desc/category/rarity/price/effect/value/scope) WITHOUT the `item_key` field — consume_active_buff() returns ITEM_CATALOG[key] which is keyless. Frontend cannot identify which item was consumed by key (only by name). Consider returning {'item_key': k, **catalog} for consistency with /shop/catalog response shape."},
+      {"endpoint": "POST /api/profile/{id}/boss-fight", "issue": "`coins_gained` reports only the boss reward (200/400), but `total_coins` may exceed coins_before+coins_gained because check_achievements() awards extra coins from newly unlocked achievements (e.g., rank-up triggers a rank achievement that grants coins). This is correct behavior but undocumented — clients computing 'delta from boss-fight' should use coins_gained, not total_coins-coins_before."},
+      {"endpoint": "GET /api/profile/{id}/boss-fight/requirements", "issue": "v6 dead-code line (deloads_done computed but unused) still present — cosmetic cleanup only."},
+      {"endpoint": "general", "issue": "server.py now 1662 lines — split overdue per >700-line guideline (carried from v5/v6/v7)."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_hunter_v7.py",
+    "/app/backend/tests/test_hunter_v7_hotfix.py",
+    "/app/test_reports/pytest/v7_hotfix_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: enrich `buff_used` in boss-fight response with item_key (currently keyless catalog dict). Same for /workout/log buff response if applicable.",
+    "OPTIONAL: split server.py (1662 lines) into modules — handlers/, services/, models/, catalog/.",
+    "OPTIONAL: remove dead deloads_done line in boss-fight/requirements handler."
+  ],
+  "critical_code_review_comments": [
+    "Hotfix correctly places consume_active_buff(p, 'boss_fight') BEFORE apply_xp() so the boss_mult value multiplies xp_reward before XP is applied — verified xp_reward=1500 with adrenaline (1000 * 1.5).",
+    "boss_coin formula `200 + (200 if new_rank != old_rank else 0)` matches spec (200 base, 400 on rank-up) — verified both branches.",
+    "p['coins'] update is correctly persisted to DB via the $set block (line 1052) and the GET /inventory reflects the new balance.",
+    "consume_active_buff() correctly mutates p['active_buffs'] and is persisted via $set 'active_buffs' (line 1053). adrenaline is removed after consumption — verified.",
+    "Scope isolation works: workout-scoped power_boost remains active after boss-fight (consume_active_buff scope='boss_fight' filter); only 'workout_or_boss' scoped items (legendary_aura) would be consumed by either flow."
+  ],
+  "updated_files": ["/app/backend/tests/test_hunter_v7_hotfix.py (new)"],
+  "success_rate": {"backend": "100% (27/27)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "~18 TEST_v7_-prefixed + ~4 TEST_v7hf_-prefixed profiles created during pytest. Not cleaned up — isolated by prefix.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "v7 + hotfix fully validated end-to-end. Boss-fight handler now correctly returns all v7 fields with coins_gained (200/400), buff consumption with xp multiplier, and proper scope isolation. Suite at /app/backend/tests/test_hunter_v7_hotfix.py provides regression coverage for boss-fight buff mechanics. Open minor issues: missing item_key in buff_used response, undocumented achievement-coin bleed into total_coins, server.py size.",
+  "rca_of_issue": "Previous iteration's NameError (boss_coin/boss_applied undefined) is RESOLVED. Lines 1011-1016 of server.py now define both variables before apply_xp(). Verified by direct test: POST /api/profile/{id}/boss-fight on unlocked profile (sq160/bn100/dl200 + 6 workouts) returns 200 with coins_gained=200, total_coins=coins_before+200+achievement_bonus, buff_used=null. With pre-activated adrenaline (boss_mult 1.5x), xp_reward=1500 and buff is removed from active_buffs."
+}

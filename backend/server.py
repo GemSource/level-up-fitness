@@ -1008,6 +1008,12 @@ async def boss_fight(profile_id: str, data: BossFightInput):
     p["boss_fight_count"] = p.get("boss_fight_count", 0) + 1
 
     xp_reward = 1000
+    # v7: Consume boss-fight buff if any
+    boss_applied = consume_active_buff(p, "boss_fight")
+    if boss_applied and boss_applied.get("effect") == "boss_mult":
+        xp_reward = int(xp_reward * boss_applied.get("value", 1.0))
+    boss_coin = 200 + (200 if new_rank != old_rank else 0)
+    p["coins"] = p.get("coins", 0) + boss_coin
     apply_xp(p, xp_reward)
 
     # Recompute goal ratio + progression mode based on new total
