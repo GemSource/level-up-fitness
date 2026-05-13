@@ -168,15 +168,18 @@ backend:
 frontend:
   - task: "Side Quest screens (index / create / [id])"
     implemented: true
-    working: "NA"
-    file: "/app/frontend/app/side-quests/"
-    stuck_count: 0
+    working: false
+    file: "/app/frontend/app/side-quests/create.tsx, /app/frontend/app/side-quests/[id].tsx"
+    stuck_count: 1
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
         - working: "NA"
           agent: "main"
-          comment: "Awaiting user permission to run frontend testing. Backend first."
+          comment: "User approved frontend testing. Three screens to validate: /side-quests (list), /side-quests/create (build a quest with >=3 exercises picked from expanded 69-exercise library, mark main compound), /side-quests/[id] (log progress + show XP earned). Reachable from dashboard widget. Expected reward = no coins, only XP."
+        - working: false
+          agent: "testing"
+          comment: "PARTIAL PASS — Most screens render and integrate with backend correctly, but a single bug breaks the post-success navigation on Expo Web preview. PASS: (1) Dashboard 'SIDE QUESTS' widget present, height=50px (>=44 touch target), routes to /side-quests. (2) Empty state with 'CREATE FIRST QUEST' CTA shown. (3) /side-quests/create loads 69 exercises from GET /api/exercises (verified). (4) Search + category pills (ALL/UPPER PUSH/UPPER PULL/LOWER/CORE) render. (5) Min-3 enforcement: save button shows 'ADD 3 MORE' / 'ADD 2 MORE' / 'ADD 1 MORE' until 3 picked, then becomes 'FORGE QUEST ⚔' (disabled-prop honoured at RN layer). (6) Per-exercise inputs sets/reps/kg/rpe work; main-compound ★ marker preserved from library item. (7) POST /api/profile/{id}/side-quest returns 200 — quest IS saved server-side. (8) Solo-Leveling aesthetic preserved (#000 bg, cyan #00FFFF accents, SystemFrame corners). (9) All API calls hit EXPO_PUBLIC_BACKEND_URL/api — no hardcoded URLs. (10) No console errors, KeyboardAvoidingView present on create + log screens. (11) Back button works on list/create. FAIL — BLOCKER for web preview UX: After successful POST in create.tsx (line 69) the code calls Alert.alert('[SIDE QUEST FORGED]', msg, [{text:'OK', onPress: () => router.replace(`/side-quests/${sq.id}`)}]). On react-native-web Alert.alert with a buttons array does NOT invoke the onPress callback (RNW polyfill limitation), so the user is stranded on /side-quests/create with no toast/redirect after a successful save. Identical pattern in [id].tsx submit() line 83 means the '+90 XP / LV X' success dialog also fails to redirect back to /side-quests on web. The quest itself is persisted (verified via 200 response + GET side-quests returning the new id), but the UI doesn't transition. This BLOCKS automated end-to-end verification of the /side-quests/[id] log flow on the Expo Web preview — could only be observed indirectly. Backend integration is verified working (POST 200, side-quest persisted, +90 XP path already validated in backend tests). Fix: replace Alert.alert(title, msg, buttons) with direct router.replace() after the request, OR use a custom modal/SystemFrame banner instead of Alert.alert when buttons+callbacks are needed (since RNW ignores them)."
 
 metadata:
   created_by: "main_agent"
@@ -186,16 +189,14 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Side Quest - Create endpoint"
-    - "Side Quest - List endpoint"
-    - "Side Quest - Log/Complete endpoint"
-    - "Regression - Profile create / workout generate / workout log / boss fight / shop"
-  stuck_tasks: []
+    - "Side Quest screens (index / create / [id])"
+  stuck_tasks:
+    - "Side Quest screens (index / create / [id])"
   test_all: false
-  test_priority: "high_first"
+  test_priority: "stuck_first"
 
 agent_communication:
     - agent: "main"
       message: "v8 Side Quest System implementation complete. Please test only the BACKEND for now (side-quest create / list / log endpoints and core regression). Use kg units, profile creation flow already validated. Side quest min 3 exercises is enforced both at creation and at log. XP formula = 10*done + 10*main_compound_done + 50 if all done + 10 if all done have rpe. No coins / no boss credit. Validate response shape and edge cases (empty exercises, already-completed quest, missing profile)."
     - agent: "testing"
-      message: "v8 backend testing complete. 21/21 test assertions PASS in /app/backend_test.py. Side Quest Create/List/Log all working correctly. XP formula verified: full completion (3 done, 1 main compound, all logged_rpe) -> 90 XP; partial (2 done, no compound, no rpe) -> 20 XP. Validations enforced: min 3 exercises on create AND log (400 detail.error='min_exercises'), unknown profile -> 404, unknown quest -> 404, already-completed quest -> 400. Coins remain unchanged after side quest completion (no coin payout). Boss-fight requirements endpoint unaffected. Smoke regression PASS on /api/exercises, /api/profile/{id}/dashboard, /api/profile/{id}/rank-progress, /api/shop/catalog, /api/profile/{id}/inventory. NOTE: POST /api/profile/{id}/workout/generate mentioned in the review request does NOT exist in server.py — workouts are auto-generated during profile creation. Not flagged as a bug. No further backend issues found; ready for main agent to summarise/finish."
+      message: "v8 frontend Side Quest screens tested on mobile viewport (390x844). Onboarding -> Dashboard widget -> /side-quests (empty) -> /side-quests/create flow all work. 69 exercises load from GET /api/exercises, min-3 enforcement is visible in the save button text ('ADD N MORE' → 'FORGE QUEST ⚔'), and POST /api/profile/{id}/side-quest returns 200 (quest is persisted). Solo-Leveling aesthetic intact, touch targets ≥44px, no console errors, KeyboardAvoidingView present, base URL is EXPO_PUBLIC_BACKEND_URL/api with no hardcoded URLs. BLOCKER ISSUE: Alert.alert(title, message, [{text:'OK', onPress: () => router.replace(...)}]) is used at create.tsx:69 and [id].tsx:83. react-native-web's Alert.alert IGNORES the buttons array's onPress callbacks, so after a successful POST the user is stranded on /side-quests/create (no toast, no redirect) and after a successful side-quest log the '+90 XP / LV X' redirect to /side-quests never fires. Quest IS created and XP IS awarded on the backend (verified via 200 responses + already-passing backend tests showing +90 XP for full completion), but the Expo Web UX is broken. RECOMMEND main agent fix by calling router.replace() directly after createSideQuest/logSideQuest resolves (and optionally a non-blocking toast/banner UI for the success message), or use Platform.OS guard to skip Alert on web. NOTE: Could not finish automated verification of /side-quests/[id] log screen end-to-end on web due to this same Alert.alert callback issue preventing navigation into the log screen after forge — on native Expo Go this would work. Backend side-quest log endpoint correctness already verified separately."
