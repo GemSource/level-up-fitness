@@ -1,46 +1,56 @@
-# Hunter Strength System — PRD v5
+# Hunter Strength System — PRD v6
 
-## v5 Update: Rank Progress Tracker
+## v6 Update: Boss Fight Lock System
 
 ### New Endpoint
-`GET /api/profile/{id}/rank-progress` — returns dynamic next-rank tracker (14/14 tests PASS).
+`GET /api/profile/{id}/boss-fight/requirements` — returns gate status for the user's next-rank Boss Fight (14/14 tests PASS).
 
 ### Response Schema
 ```json
 {
-  "current_rank": "C",
-  "next_rank": "B",
-  "next_threshold_kg": 700,
-  "current_total": 620,
-  "remaining_kg": 80,
-  "progress_pct": 88.6,
-  "lift_contributions": {"squat": 25, "bench": 27.5, "deadlift": 27.5},
-  "xp": {"current": 1150, "level": 5, "next_level_xp": 1500},
-  "projected_weeks": {"min": 16, "max": 32},
-  "message": "[SYSTEM]: 80kg away from B Rank. Focus on your bench to break through.",
-  "rank_up": false
+  "locked": true,
+  "next_rank": "C",
+  "next_threshold_kg": 550,
+  "rank_threshold_kg": 600,
+  "requirements": [
+    {"key":"total","label":"Total","have":580,"need":550,"unit":"kg","met":true},
+    {"key":"squat","label":"Squat","have":140,"need":130,"unit":"kg","met":true},
+    {"key":"bench","label":"Bench","have":80,"need":90,"unit":"kg","met":false},
+    {"key":"deadlift","label":"Deadlift","have":160,"need":150,"unit":"kg","met":true},
+    {"key":"quests","label":"Quests Completed","have":8,"need":12,"unit":"","met":false},
+    {"key":"deloads","label":"Deload Weeks","have":0,"need":1,"unit":"","met":false}
+  ],
+  "missing": ["Bench needs +10kg","Complete 4 more quests completed","Complete 1 more deload weeks"],
+  "max_rank": false
 }
 ```
 
-### Logic
-- **Lift contribution math**: distributes `remaining_kg` weighted by gap from ideal powerlifting ratios (squat 36% / bench 26% / deadlift 38% of total). Weaker lifts (further from ideal share) get more recommended kg.
-- **Projected weeks**: if user has gained since `starting_total`, uses actual rate (kg/week). Otherwise falls back to `progression_mode` range.
-- **Dynamic messaging tiers**: ≥95% → "Almost there"; 75-95% → references weakest lift + remaining kg; 50-75% → "Steady progression"; <50% → "The path is long"; S-rank → "Monarch" acknowledgement.
+### Requirement Tiers (per next-rank target)
+| Target | Total | Squat | Bench | Deadlift | Quests | Deloads |
+|--------|-------|-------|-------|----------|--------|---------|
+| D      | 450   | 100   | 60    | 120      | 6      | 0       |
+| C      | 550   | 130   | 90    | 150      | 12     | 1       |
+| B      | 650   | 150   | 110   | 170      | 20     | 1       |
+| A      | 750   | 180   | 130   | 200      | 30     | 2       |
+| S      | 850   | 220   | 150   | 240      | 50     | 2       |
+
+### Enforcement
+`POST /api/profile/{id}/boss-fight` now calls `evaluate_boss_requirements()` first. Returns **403 Forbidden** with structured detail if locked:
+```json
+{"detail": {"error":"boss_fight_locked","message":"Boss Fight Locked","next_rank":"C","missing":[...],"requirements":[...]}}
+```
 
 ### Frontend
-- **`/src/components/RankProgressCard.tsx`** — reusable component with `compact` prop
-- **Progress page**: full card at top with all stats, lift breakdown, XP bar, projected ETA, motivational message
-- **Dashboard**: compact widget (smaller badges, no lift breakdown) showing current→next rank transition with progress bar
+- **`/boss-fight` screen**: when locked, shows red-bordered SystemFrame with:
+  - Lock icon + "BOSS FIGHT LOCKED" header
+  - Per-requirement row (✓ met / ✗ unmet) showing `have / need` values
+  - Red "MISSING" box listing actionable gaps ("Bench needs +10kg", "Complete 4 more quests")
+  - Input fields dimmed (editable=false)
+  - Engage button shows "LOCKED — COMPLETE REQUIREMENTS" with neutral styling
+- Submit handler parses 403 structured response and re-displays missing list as alert
 
-## Cumulative System (v1-v5)
-- 116 achievements / 20 categories / 5 tiers (Beginner→Elite)
-- 84 lift achievements with bodyweight ratios + thresholds
-- RPE-driven adaptive load (auto-adjusts upcoming sessions)
-- Per-day intensity modifier (Low/Base/High)
-- Goal-ratio progression mode (conservative/moderate/aggressive)
-- Cardio log (run/bike/sprint) with pace + distance achievements
-- AI Coach (Claude Sonnet 4.5) via Emergent LLM key
-- Boss Fight max test with rank-up animation
-- Auto-generated 6-week training blocks
-
-Backend test totals across iterations: v1: 16/16, v3: 34/34, v4: 15/15, v5: 14/14 — all PASS.
+## Cumulative System (v1-v6)
+- 8+ feature areas: onboarding, auto-block, RPE adaptive load, day-intensity, goal-ratio progression, cardio, AI coach, rank progress, boss-fight gates
+- 116 achievements / 20 categories / 5 tiers
+- 11 backend endpoints; AI via real Claude Sonnet 4.5
+- Backend total tests: v1: 16, v3: 34, v4: 15, v5: 14, v6: 14 — **93/93 PASS**

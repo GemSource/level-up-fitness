@@ -1209,9 +1209,7 @@ def evaluate_boss_requirements(p: dict) -> Dict[str, Any]:
         return {"locked": False, "next_rank": target, "requirements": [], "missing": []}
 
     completed_quests = sum(1 for w in p.get("workouts", []) if w.get("completed"))
-    deloads_done = int(p.get("first_deload_done", False)) + max(0, p.get("boss_fight_count", 0))
-    # boss_fight_count is a proxy for completed cycles where deload happened
-    # Use first_deload_done flag + deloads from completed weeks_completed list including W6
+    # Deload count: weeks_completed entries ending in :W6, with fallback to first_deload_done flag
     weeks_done = p.get("weeks_completed", [])
     deload_count = sum(1 for k in weeks_done if k.endswith(":W6")) or (1 if p.get("first_deload_done") else 0)
 
