@@ -12,16 +12,17 @@ import { getAchievements, getProfile } from '../../src/api';
 const RANKS = ['E', 'D', 'C', 'B', 'A', 'S'];
 
 const TIER_COLOR: Record<string, string> = {
-  basic: '#7CFFCB',
-  medium: '#00FFFF',
-  major: '#C77CFF',
-  elite: '#FFD700',
+  beginner: '#7CFFCB',  // green glow
+  basic: '#00FFFF',     // cyan
+  medium: '#7C9DFF',    // blue
+  major: '#C77CFF',     // purple
+  elite: '#FFD700',     // gold
 };
 
 const CATEGORY_ORDER = [
-  'Rank', 'Quests', 'Weekly', 'Streak',
-  'Squat', 'Bench', 'Deadlift', 'Total',
-  'Elite', 'Volume', 'Quality',
+  'Firsts', 'Rank', 'Quests', 'Weekly', 'Streak',
+  'Squat', 'Bench', 'Deadlift', 'Total', 'Bodyweight', 'Progression',
+  'Quality', 'Volume',
   'Run', 'Pace', 'Sprint', 'Bike',
   'Hybrid', 'Boss', 'Special',
 ];

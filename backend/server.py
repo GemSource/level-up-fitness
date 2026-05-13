@@ -281,26 +281,57 @@ def _ach(name, desc, category, tier="basic"):
 
 ACHIEVEMENTS = {
     # Strength: Squat
-    "squat_100": _ach("100kg Squat", "Squat 100kg or more", "Squat", "basic"),
+    "first_squat": _ach("First Squat", "Log your first squat session", "Squat", "beginner"),
+    "squat_60": _ach("60kg Squat", "Squat 60kg or more", "Squat", "beginner"),
+    "squat_80": _ach("80kg Squat", "Squat 80kg or more", "Squat", "beginner"),
+    "squat_100": _ach("100kg Squat", "Squat 100kg or more", "Squat", "beginner"),
+    "squat_120": _ach("120kg Squat", "Squat 120kg or more", "Squat", "basic"),
     "squat_140": _ach("140kg Squat", "Squat 140kg or more", "Squat", "basic"),
+    "squat_160": _ach("160kg Squat", "Squat 160kg or more", "Squat", "medium"),
     "squat_180": _ach("180kg Squat", "Squat 180kg or more", "Squat", "medium"),
-    "squat_200": _ach("200kg Squat", "Squat 200kg or more", "Squat", "medium"),
+    "squat_200": _ach("200kg Squat", "Squat 200kg or more", "Squat", "major"),
     "squat_220": _ach("220kg Squat", "Squat 220kg or more", "Squat", "major"),
     "squat_250": _ach("250kg Squat", "Squat 250kg or more", "Squat", "elite"),
     # Strength: Bench
+    "first_bench": _ach("First Bench", "Log your first bench session", "Bench", "beginner"),
+    "bench_40": _ach("40kg Bench", "Bench 40kg or more", "Bench", "beginner"),
+    "bench_60": _ach("60kg Bench", "Bench 60kg or more", "Bench", "beginner"),
+    "bench_80": _ach("80kg Bench", "Bench 80kg or more", "Bench", "beginner"),
     "bench_100": _ach("100kg Bench", "Bench 100kg or more", "Bench", "basic"),
-    "bench_140": _ach("140kg Bench", "Bench 140kg or more", "Bench", "basic"),
+    "bench_120": _ach("120kg Bench", "Bench 120kg or more", "Bench", "basic"),
+    "bench_140": _ach("140kg Bench", "Bench 140kg or more", "Bench", "medium"),
     "bench_160": _ach("160kg Bench", "Bench 160kg or more", "Bench", "medium"),
-    "bench_180": _ach("180kg Bench", "Bench 180kg or more", "Bench", "medium"),
+    "bench_180": _ach("180kg Bench", "Bench 180kg or more", "Bench", "major"),
     "bench_200": _ach("200kg Bench", "Bench 200kg or more", "Bench", "major"),
     "bench_220": _ach("220kg Bench", "Bench 220kg or more", "Bench", "elite"),
     # Strength: Deadlift
+    "first_deadlift": _ach("First Deadlift", "Log your first deadlift session", "Deadlift", "beginner"),
+    "deadlift_60": _ach("60kg Deadlift", "Deadlift 60kg or more", "Deadlift", "beginner"),
+    "deadlift_100": _ach("100kg Deadlift", "Deadlift 100kg or more", "Deadlift", "beginner"),
     "deadlift_140": _ach("140kg Deadlift", "Deadlift 140kg or more", "Deadlift", "basic"),
     "deadlift_180": _ach("180kg Deadlift", "Deadlift 180kg or more", "Deadlift", "basic"),
+    "deadlift_200": _ach("200kg Deadlift", "Deadlift 200kg or more", "Deadlift", "medium"),
     "deadlift_220": _ach("220kg Deadlift", "Deadlift 220kg or more", "Deadlift", "medium"),
-    "deadlift_240": _ach("240kg Deadlift", "Deadlift 240kg or more", "Deadlift", "medium"),
+    "deadlift_240": _ach("240kg Deadlift", "Deadlift 240kg or more", "Deadlift", "major"),
     "deadlift_260": _ach("260kg Deadlift", "Deadlift 260kg or more", "Deadlift", "major"),
     "deadlift_300": _ach("300kg Deadlift", "Deadlift 300kg or more", "Deadlift", "elite"),
+    # Bodyweight ratios: Bench
+    "bench_bw_05": _ach("Half-BW Bench", "Bench 0.5x bodyweight", "Bodyweight", "beginner"),
+    "bench_bw_075": _ach("0.75x BW Bench", "Bench 0.75x bodyweight", "Bodyweight", "basic"),
+    "bench_bw_1": _ach("Bodyweight Bench", "Bench 1x bodyweight", "Bodyweight", "medium"),
+    "bench_bw_125": _ach("1.25x BW Bench", "Bench 1.25x bodyweight", "Bodyweight", "major"),
+    "bench_bw_15": _ach("Bench Technician — 1.5x BW", "Bench 1.5x bodyweight", "Bodyweight", "elite"),
+    # Bodyweight ratios: Squat
+    "squat_bw_1": _ach("Bodyweight Squat", "Squat 1x bodyweight", "Bodyweight", "basic"),
+    "squat_bw_15": _ach("1.5x BW Squat", "Squat 1.5x bodyweight", "Bodyweight", "medium"),
+    "squat_bw_2": _ach("Squat Specialist — 2x BW", "Squat 2x bodyweight", "Bodyweight", "major"),
+    "squat_bw_25": _ach("2.5x BW Squat", "Squat 2.5x bodyweight", "Bodyweight", "elite"),
+    # Bodyweight ratios: Deadlift
+    "deadlift_bw_1": _ach("Bodyweight Deadlift", "Deadlift 1x bodyweight", "Bodyweight", "basic"),
+    "deadlift_bw_15": _ach("1.5x BW Deadlift", "Deadlift 1.5x bodyweight", "Bodyweight", "medium"),
+    "deadlift_bw_2": _ach("2x BW Deadlift", "Deadlift 2x bodyweight", "Bodyweight", "major"),
+    "deadlift_bw_25": _ach("Deadlift Monster — 2.5x BW", "Deadlift 2.5x bodyweight", "Bodyweight", "elite"),
+    "deadlift_bw_3": _ach("3x BW Deadlift — Mythic", "Deadlift 3x bodyweight", "Bodyweight", "elite"),
     # Total
     "total_500": _ach("500kg Total", "Reach a 500kg powerlifting total", "Total", "basic"),
     "total_600": _ach("600kg Total", "Reach a 600kg powerlifting total", "Total", "medium"),
@@ -308,12 +339,22 @@ ACHIEVEMENTS = {
     "total_800": _ach("800kg Total", "Reach an 800kg powerlifting total", "Total", "major"),
     "total_900": _ach("900kg Total", "Reach a 900kg powerlifting total", "Total", "major"),
     "total_1000": _ach("1000kg Total — Final Boss", "Conquer the 1000kg total", "Total", "elite"),
-    # Quest count
+    # Firsts (beginner-focused)
+    "first_workout": _ach("First Awakening", "Complete your first quest", "Firsts", "beginner"),
+    "first_week": _ach("First Week Completed", "Complete an entire training week", "Firsts", "basic"),
+    "first_deload": _ach("First Deload", "Complete a deload week (week 6)", "Firsts", "basic"),
+    # Quest count (added 3 for beginners)
+    "quests_3": _ach("Three Quests Down", "Complete 3 quests", "Quests", "beginner"),
     "quests_5": _ach("Apprentice Hunter", "Complete 5 quests", "Quests", "basic"),
     "quests_10": _ach("Seasoned Hunter", "Complete 10 quests", "Quests", "basic"),
     "quests_25": _ach("Veteran Hunter", "Complete 25 quests", "Quests", "medium"),
     "quests_50": _ach("Elite Hunter", "Complete 50 quests", "Quests", "major"),
     "quests_100": _ach("Master Hunter", "Complete 100 quests", "Quests", "elite"),
+    # Progression from starting maxes
+    "gain_lift_5": _ach("First +5kg Gain", "Add 5kg to any single lift", "Progression", "beginner"),
+    "gain_lift_10": _ach("+10kg Gain", "Add 10kg to any single lift", "Progression", "basic"),
+    "gain_total_20": _ach("+20kg Total", "Add 20kg to your total", "Progression", "basic"),
+    "gain_total_50": _ach("+50kg Total", "Add 50kg to your total", "Progression", "medium"),
     # Weekly consistency
     "perfect_week_1": _ach("Perfect Week", "Complete all workouts in one week", "Weekly", "basic"),
     "perfect_week_2": _ach("Two Perfect Weeks", "Two perfect training weeks", "Weekly", "medium"),
@@ -325,7 +366,7 @@ ACHIEVEMENTS = {
     "streak_14": _ach("14 Day Streak", "Train 14 days in a row", "Streak", "major"),
     "streak_30": _ach("30 Day Streak", "Train 30 days in a row", "Streak", "elite"),
     # Running distance (single session)
-    "run_1k": _ach("First Mile-ish", "Run 1km in a single session", "Run", "basic"),
+    "run_1k": _ach("First Mile-ish", "Run 1km in a single session", "Run", "beginner"),
     "run_3k": _ach("3km Run", "Run 3km in a single session", "Run", "basic"),
     "run_5k": _ach("5km Run", "Run 5km in a single session", "Run", "medium"),
     "run_10k": _ach("10km Run", "Run 10km in a single session", "Run", "major"),
@@ -345,7 +386,7 @@ ACHIEVEMENTS = {
     "sprint_200_40": _ach("200m under 40s", "Sprint 200m under 40 seconds", "Sprint", "medium"),
     "sprint_400_90": _ach("400m under 90s", "Sprint 400m under 90 seconds", "Sprint", "major"),
     # Bike single ride
-    "bike_5": _ach("5km Ride", "Cycle 5km in a single ride", "Bike", "basic"),
+    "bike_5": _ach("5km Ride", "Cycle 5km in a single ride", "Bike", "beginner"),
     "bike_10": _ach("10km Ride", "Cycle 10km in a single ride", "Bike", "basic"),
     "bike_20": _ach("20km Ride", "Cycle 20km in a single ride", "Bike", "medium"),
     "bike_50": _ach("50km Ride", "Cycle 50km in a single ride", "Bike", "major"),
@@ -359,10 +400,6 @@ ACHIEVEMENTS = {
     "perfect_workout_1": _ach("Perfect Workout", "Hit every prescribed set/rep target", "Quality", "basic"),
     "perfect_workout_5": _ach("Five Perfect Workouts", "Five flawless quests", "Quality", "medium"),
     "perfect_workout_10": _ach("Ten Perfect Workouts", "Ten flawless quests", "Quality", "major"),
-    # Elite bodyweight ratios
-    "squat_specialist": _ach("Squat Specialist", "Squat 2x bodyweight", "Elite", "major"),
-    "bench_technician": _ach("Bench Technician", "Bench 1.5x bodyweight", "Elite", "major"),
-    "deadlift_monster": _ach("Deadlift Monster", "Deadlift 2.5x bodyweight", "Elite", "elite"),
     # Hybrid
     "hybrid_run_5": _ach("Iron + Mile", "Lift + run same session 5 times", "Hybrid", "medium"),
     "hybrid_bike_5": _ach("Iron + Wheels", "Lift + bike same session 5 times", "Hybrid", "medium"),
@@ -370,7 +407,7 @@ ACHIEVEMENTS = {
     "volume_session_10k": _ach("10,000kg Session", "Lift 10,000kg total in one session", "Volume", "medium"),
     "volume_week_25k": _ach("25,000kg Week", "Lift 25,000kg total in one week", "Volume", "major"),
     # Rank progression
-    "rank_e": _ach("Awakened — E Rank", "Reach E Rank", "Rank", "basic"),
+    "rank_e": _ach("Awakened — E Rank", "Reach E Rank", "Rank", "beginner"),
     "rank_d": _ach("Reached D Rank", "Reach D Rank", "Rank", "basic"),
     "rank_c": _ach("Reached C Rank", "Reach C Rank", "Rank", "medium"),
     "rank_b": _ach("Reached B Rank", "Reach B Rank", "Rank", "medium"),
@@ -381,12 +418,11 @@ ACHIEVEMENTS = {
     "comeback_arc": _ach("Comeback Arc", "Return after 5+ missed days", "Special", "basic"),
     "night_session": _ach("Night Hunter", "Train after 9pm", "Special", "basic"),
     "early_hunter": _ach("Early Hunter", "Train before 6am", "Special", "basic"),
-    # Boss / first
-    "first_workout": _ach("First Awakening", "Complete your first quest", "Quests", "basic"),
+    # Boss
     "boss_slayer": _ach("Boss Slayer", "Complete a Boss Fight", "Boss", "major"),
 }
 
-TIER_XP = {"basic": 50, "medium": 100, "major": 250, "elite": 500}
+TIER_XP = {"beginner": 25, "basic": 50, "medium": 100, "major": 250, "elite": 500}
 
 def check_achievements(profile: dict, completed_workouts: int) -> List[str]:
     """Returns list of NEWLY unlocked achievement keys. Awards XP for each."""
@@ -405,12 +441,28 @@ def check_achievements(profile: dict, completed_workouts: int) -> List[str]:
     bw = profile.get("bodyweight", 1) or 1
 
     # Strength single-lift
-    for thr in [100, 140, 180, 200, 220, 250]:
+    for thr in [60, 80, 100, 120, 140, 160, 180, 200, 220, 250]:
         if sq >= thr: add(f"squat_{thr}")
-    for thr in [100, 140, 160, 180, 200, 220]:
+    for thr in [40, 60, 80, 100, 120, 140, 160, 180, 200, 220]:
         if bn >= thr: add(f"bench_{thr}")
-    for thr in [140, 180, 220, 240, 260, 300]:
+    for thr in [60, 100, 140, 180, 200, 220, 240, 260, 300]:
         if dl >= thr: add(f"deadlift_{thr}")
+
+    # Bodyweight ratios
+    if bn >= bw * 0.5: add("bench_bw_05")
+    if bn >= bw * 0.75: add("bench_bw_075")
+    if bn >= bw * 1.0: add("bench_bw_1")
+    if bn >= bw * 1.25: add("bench_bw_125")
+    if bn >= bw * 1.5: add("bench_bw_15")
+    if sq >= bw * 1.0: add("squat_bw_1")
+    if sq >= bw * 1.5: add("squat_bw_15")
+    if sq >= bw * 2.0: add("squat_bw_2")
+    if sq >= bw * 2.5: add("squat_bw_25")
+    if dl >= bw * 1.0: add("deadlift_bw_1")
+    if dl >= bw * 1.5: add("deadlift_bw_15")
+    if dl >= bw * 2.0: add("deadlift_bw_2")
+    if dl >= bw * 2.5: add("deadlift_bw_25")
+    if dl >= bw * 3.0: add("deadlift_bw_3")
 
     # Total
     for thr in [500, 600, 700, 800, 900, 1000]:
@@ -418,8 +470,28 @@ def check_achievements(profile: dict, completed_workouts: int) -> List[str]:
 
     # Quest counts
     if completed_workouts >= 1: add("first_workout")
-    for thr in [5, 10, 25, 50, 100]:
+    for thr in [3, 5, 10, 25, 50, 100]:
         if completed_workouts >= thr: add(f"quests_{thr}")
+
+    # Progression from starting maxes
+    start_sq = profile.get("starting_squat", sq)
+    start_bn = profile.get("starting_bench", bn)
+    start_dl = profile.get("starting_deadlift", dl)
+    start_total = profile.get("starting_total", total)
+    gain_lift = max(sq - start_sq, bn - start_bn, dl - start_dl)
+    if gain_lift >= 5: add("gain_lift_5")
+    if gain_lift >= 10: add("gain_lift_10")
+    gain_total = total - start_total
+    if gain_total >= 20: add("gain_total_20")
+    if gain_total >= 50: add("gain_total_50")
+
+    # First sessions by day type
+    sessions_done = set(profile.get("session_types_completed", []))
+    if "SQUAT_DAY" in sessions_done: add("first_squat")
+    if "BENCH_DAY" in sessions_done: add("first_bench")
+    if "DEADLIFT_DAY" in sessions_done: add("first_deadlift")
+    if profile.get("first_week_done"): add("first_week")
+    if profile.get("first_deload_done"): add("first_deload")
 
     # Perfect weeks
     pw = profile.get("perfect_weeks", 0)
@@ -481,10 +553,7 @@ def check_achievements(profile: dict, completed_workouts: int) -> List[str]:
     if pwo >= 5: add("perfect_workout_5")
     if pwo >= 10: add("perfect_workout_10")
 
-    # Elite bodyweight ratios
-    if sq >= bw * 2.0: add("squat_specialist")
-    if bn >= bw * 1.5: add("bench_technician")
-    if dl >= bw * 2.5: add("deadlift_monster")
+    # Elite bodyweight ratios — now covered by Bodyweight category above (no-op aliases removed)
 
     # Hybrid
     if profile.get("hybrid_run_sessions", 0) >= 5: add("hybrid_run_5")
@@ -548,6 +617,14 @@ async def create_profile(data: OnboardingInput):
         estimated_weeks_to_goal=eta,
     )
     pdoc = profile.model_dump()
+    # Baseline maxes for progression achievements
+    pdoc["starting_squat"] = data.squat_max
+    pdoc["starting_bench"] = data.bench_max
+    pdoc["starting_deadlift"] = data.deadlift_max
+    pdoc["starting_total"] = total
+    pdoc["session_types_completed"] = []
+    pdoc["first_week_done"] = False
+    pdoc["first_deload_done"] = False
     # generate first block (scaled by goal ratio)
     workouts = generate_block(data.squat_max, data.bench_max, data.deadlift_max, data.training_days, goal_ratio)
     pdoc["workouts"] = workouts
@@ -719,12 +796,19 @@ async def log_workout(profile_id: str, data: WorkoutLogInput):
 
     # Weekly bonus + perfect weeks + weekly volume bucket (must precede apply_xp)
     if workout_complete:
+        # Mark session-type-first
+        st = set(p.get("session_types_completed", []))
+        st.add(target_w.get("day_type", ""))
+        p["session_types_completed"] = list(st)
+
         week_no = target_w["week"]
         week_workouts = [w for w in workouts if w["week"] == week_no]
         if all(w.get("completed") for w in week_workouts):
             xp_gained += 300
             if week_no == 6:
                 xp_gained += 200  # deload
+                p["first_deload_done"] = True
+            p["first_week_done"] = True
             done_weeks = set(p.get("weeks_completed", []))
             # Use block_start_date + week to make a unique key
             week_key = f"{p.get('block_start_date','')[:10]}:W{week_no}"
@@ -809,6 +893,9 @@ async def log_workout(profile_id: str, data: WorkoutLogInput):
             "hybrid_run_sessions": p.get("hybrid_run_sessions", 0),
             "hybrid_bike_sessions": p.get("hybrid_bike_sessions", 0),
             "no_days_off_max": p.get("no_days_off_max", 0),
+            "session_types_completed": p.get("session_types_completed", []),
+            "first_week_done": p.get("first_week_done", False),
+            "first_deload_done": p.get("first_deload_done", False),
         }}
     )
 
