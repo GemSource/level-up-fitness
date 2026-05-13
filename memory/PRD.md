@@ -1,42 +1,46 @@
-# Hunter Strength System — PRD v4
+# Hunter Strength System — PRD v5
 
-## v4 Update: Beginner-Friendly Achievement Tiers (116 total)
+## v5 Update: Rank Progress Tracker
 
-### New Tier System (5 visual tiers with XP rewards)
-- **🟢 Beginner** (+25 XP) — green glow — entry wins for new lifters
-- **🔵 Basic** (+50 XP) — cyan
-- **🔷 Medium** (+100 XP) — blue
-- **🟣 Major** (+250 XP) — purple
-- **🟡 Elite** (+500 XP) — gold
+### New Endpoint
+`GET /api/profile/{id}/rank-progress` — returns dynamic next-rank tracker (14/14 tests PASS).
 
-### Achievement Categories (20 total, 116 achievements)
-- **Firsts**: First Workout, First Week, First Deload
-- **Strength ladders**: Squat 60-250kg (11 tiers), Bench 40-220kg (11 tiers), Deadlift 60-300kg (10 tiers)
-- **Bodyweight ratios**: Bench 0.5/0.75/1/1.25/1.5x BW; Squat 1/1.5/2/2.5x BW; Deadlift 1/1.5/2/2.5/3x BW
-- **Progression** (from baseline): +5kg/+10kg single lift, +20kg/+50kg total
-- **Total**: 500/600/700/800/900/1000kg
-- **Quests**: 1/3/5/10/25/50/100 completed
-- **Weekly/Streak**: Perfect weeks (1/2/4/8), Streak (3/7/14/30 days)
-- **Cardio**: Run (distance/total/pace), Bike (single/total), Sprint (100m/200m/400m)
-- **Quality**: RPE logged, Perfect workouts
-- **Hybrid**: Lift+Run/Bike same session
-- **Volume**: 10k session, 25k week
-- **Rank**: E→S (auto-unlock chain)
-- **Special**: No Days Off, Comeback Arc, Night Hunter, Early Hunter
-- **Boss**: Boss Slayer
+### Response Schema
+```json
+{
+  "current_rank": "C",
+  "next_rank": "B",
+  "next_threshold_kg": 700,
+  "current_total": 620,
+  "remaining_kg": 80,
+  "progress_pct": 88.6,
+  "lift_contributions": {"squat": 25, "bench": 27.5, "deadlift": 27.5},
+  "xp": {"current": 1150, "level": 5, "next_level_xp": 1500},
+  "projected_weeks": {"min": 16, "max": 32},
+  "message": "[SYSTEM]: 80kg away from B Rank. Focus on your bench to break through.",
+  "rank_up": false
+}
+```
 
-### Tracking Added in v4
-- `starting_squat/bench/deadlift/total` — baseline from onboarding (NOT reset by Boss Fight, so progression accrues forever)
-- `session_types_completed` — list of day_types user has completed
-- `first_week_done`, `first_deload_done` — first-time milestone flags
-
-### Backend: 15/15 v4 tests PASS
-- Beginner profile (60/40/80kg, bw 80) auto-unlocks 6 entry achievements on signup
-- Strong profile (200/140/240) gets full ladder + elite bodyweight ratios
-- First-session detection by day_type fires on first SQUAT/BENCH/DEADLIFT day
-- Progression: Boss-fight increases trigger gain_lift_5/_10 and gain_total_20/_50
-- Rank chain still auto-unlocks all lower tiers
+### Logic
+- **Lift contribution math**: distributes `remaining_kg` weighted by gap from ideal powerlifting ratios (squat 36% / bench 26% / deadlift 38% of total). Weaker lifts (further from ideal share) get more recommended kg.
+- **Projected weeks**: if user has gained since `starting_total`, uses actual rate (kg/week). Otherwise falls back to `progression_mode` range.
+- **Dynamic messaging tiers**: ≥95% → "Almost there"; 75-95% → references weakest lift + remaining kg; 50-75% → "Steady progression"; <50% → "The path is long"; S-rank → "Monarch" acknowledgement.
 
 ### Frontend
-- Tier color updated: beginner → green (#7CFFCB), basic → cyan, medium → blue, major → purple, elite → gold
-- Category filter chips include new Firsts, Bodyweight, Progression
+- **`/src/components/RankProgressCard.tsx`** — reusable component with `compact` prop
+- **Progress page**: full card at top with all stats, lift breakdown, XP bar, projected ETA, motivational message
+- **Dashboard**: compact widget (smaller badges, no lift breakdown) showing current→next rank transition with progress bar
+
+## Cumulative System (v1-v5)
+- 116 achievements / 20 categories / 5 tiers (Beginner→Elite)
+- 84 lift achievements with bodyweight ratios + thresholds
+- RPE-driven adaptive load (auto-adjusts upcoming sessions)
+- Per-day intensity modifier (Low/Base/High)
+- Goal-ratio progression mode (conservative/moderate/aggressive)
+- Cardio log (run/bike/sprint) with pace + distance achievements
+- AI Coach (Claude Sonnet 4.5) via Emergent LLM key
+- Boss Fight max test with rank-up animation
+- Auto-generated 6-week training blocks
+
+Backend test totals across iterations: v1: 16/16, v3: 34/34, v4: 15/15, v5: 14/14 — all PASS.
