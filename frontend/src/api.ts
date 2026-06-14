@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { router } from 'expo-router';
 
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -6,6 +7,17 @@ export const api = axios.create({
   baseURL: `${BASE}/api`,
   timeout: 60000,
 });
+
+// Global interceptor — redirect to paywall on 402
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error?.response?.status === 402) {
+      router.replace('/paywall');
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const createProfile = (data: any) => api.post('/profile', data).then(r => r.data);
 export const getProfile = (id: string) => api.get(`/profile/${id}`).then(r => r.data);
@@ -28,3 +40,4 @@ export const createSideQuest = (id: string, payload: any) => api.post(`/profile/
 export const listSideQuests = (id: string) => api.get(`/profile/${id}/side-quests`).then(r => r.data);
 export const logSideQuest = (id: string, payload: any) => api.post(`/profile/${id}/side-quest/log`, payload).then(r => r.data);
 export const addCustomExercise = (id: string, payload: any) => api.post(`/profile/${id}/custom-exercise`, payload).then(r => r.data);
+export const verifyPurchase = (id: string) => api.post(`/profile/${id}/verify-purchase`).then(r => r.data);

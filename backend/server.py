@@ -53,6 +53,7 @@ class Profile(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     block_start_date: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     boss_fight_count: int = 0
+    has_paid: bool = False
     achievements: List[str] = []
     pending_adjustments: Dict[str, float] = {"squat": 0.0, "bench": 0.0, "deadlift": 0.0}
     # Aggregate stats for achievements
@@ -603,6 +604,10 @@ def check_achievements(profile: dict, completed_workouts: int) -> List[str]:
     profile["achievement_coins_last"] = coin_bonus
     return new
 
+def requires_payment(p: dict) -> bool:
+    """Returns True if this profile needs to pay before continuing."""
+    return p.get("boss_fight_count", 0) >= 1 and not p.get("has_paid", False)
+
 # ---------------- Routes ----------------
 @api_router.get("/")
 async def root():
@@ -695,6 +700,11 @@ async def log_workout(profile_id: str, data: WorkoutLogInput):
     p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Profile not found")
+    if requires_payment(p):
+        raise HTTPException(
+            status_code=402,
+            detail={"error": "payment_required", "message": "Complete your first boss fight to unlock full Hunter access."}
+        )
     workouts = p.get("workouts", [])
     target_w = None
     for w in workouts:
@@ -983,6 +993,11 @@ async def boss_fight(profile_id: str, data: BossFightInput):
     p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Profile not found")
+    if requires_payment(p):
+        raise HTTPException(
+            status_code=402,
+            detail={"error": "payment_required", "message": "Complete your first boss fight to unlock full Hunter access."}
+        )
 
     # Check requirements before allowing test
     req_eval = evaluate_boss_requirements(p)
@@ -1053,6 +1068,7 @@ async def boss_fight(profile_id: str, data: BossFightInput):
             "pending_adjustments": p["pending_adjustments"],
             "coins": p.get("coins", 0),
             "active_buffs": p.get("active_buffs", []),
+            "has_paid": p.get("has_paid", False),
         }}
     )
     return {
@@ -1065,8 +1081,17 @@ async def boss_fight(profile_id: str, data: BossFightInput):
         "coins_gained": boss_coin,
         "total_coins": p.get("coins", 0),
         "buff_used": boss_applied,
+        "boss_fight_count": p["boss_fight_count"],
         "new_achievements": [{"key": k, **ACHIEVEMENTS[k]} for k in new_ach],
     }
+
+@api_router.post("/profile/{profile_id}/verify-purchase")
+async def verify_purchase(profile_id: str):
+    p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Profile not found")
+    await db.profiles.update_one({"id": profile_id}, {"$set": {"has_paid": True}})
+    return {"success": True, "has_paid": True}
 
 @api_router.get("/profile/{profile_id}/achievements")
 async def get_achievements(profile_id: str):
@@ -1132,6 +1157,11 @@ async def log_cardio(profile_id: str, data: CardioInput):
     p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Profile not found")
+    if requires_payment(p):
+        raise HTTPException(
+            status_code=402,
+            detail={"error": "payment_required", "message": "Complete your first boss fight to unlock full Hunter access."}
+        )
     activity = data.activity.lower()
     if activity not in ("run", "bike", "sprint"):
         raise HTTPException(400, "activity must be run, bike, or sprint")
@@ -1533,6 +1563,11 @@ async def shop_buy(profile_id: str, data: ShopBuyInput):
     p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Profile not found")
+    if requires_payment(p):
+        raise HTTPException(
+            status_code=402,
+            detail={"error": "payment_required", "message": "Complete your first boss fight to unlock full Hunter access."}
+        )
     item = ITEM_CATALOG.get(data.item_key)
     if not item:
         raise HTTPException(400, "Unknown item")
@@ -1784,6 +1819,11 @@ async def log_side_quest(profile_id: str, data: SideQuestLogInput):
     p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Profile not found")
+    if requires_payment(p):
+        raise HTTPException(
+            status_code=402,
+            detail={"error": "payment_required", "message": "Complete your first boss fight to unlock full Hunter access."}
+        )
     quests = list(p.get("side_quests", []))
     target = next((q for q in quests if q["id"] == data.quest_id), None)
     if not target:
@@ -1836,6 +1876,11 @@ async def ai_coach(profile_id: str, data: AICoachInput):
     p = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Profile not found")
+    if requires_payment(p):
+        raise HTTPException(
+            status_code=402,
+            detail={"error": "payment_required", "message": "Complete your first boss fight to unlock full Hunter access."}
+        )
 
     workouts = p.get("workouts", [])
     completed = [w for w in workouts if w.get("completed")][-5:]

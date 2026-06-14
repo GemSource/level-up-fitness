@@ -95,8 +95,12 @@ export default function BossFight() {
               ))}
             </View>
           )}
-          <Text style={styles.continueHint}>// A new 6-week block has been forged from your power.</Text>
-          <TouchableOpacity testID="btn-continue" style={styles.continueBtn} onPress={() => router.replace('/(tabs)/dashboard')}>
+          <Text style={styles.continueHint}>
+            {result.boss_fight_count === 1
+              ? '// Your Hunter rank has been recognized. Unlock full access to continue your ascent.'
+              : '// A new 6-week block has been forged from your power.'}
+          </Text>
+          <TouchableOpacity testID="btn-continue" style={styles.continueBtn} onPress={() => result.boss_fight_count === 1 ? router.replace('/paywall') : router.replace('/(tabs)/dashboard')}>
             <Text style={styles.continueTxt}>RETURN TO STATUS</Text>
           </TouchableOpacity>
         </ScrollView>
